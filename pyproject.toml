@@ -1,0 +1,34 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "qpcr-analyzer"
+version = "0.1.0"
+description = "Lightweight browser-based qPCR data analysis"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Jielin Yang", email = "jielin.yang@sickkids.ca" }]
+license = { text = "MIT" }
+dependencies = [
+    "nicegui>=2.0",
+    "pandas>=2.0",
+    "numpy>=1.24",
+    "openpyxl>=3.1",
+    "plotly>=5.18",
+    "rapidfuzz>=3.5",
+]
+
+[project.optional-dependencies]
+xls = ["xlrd>=1.2,<2.0"]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+qpcr-analyzer = "qpcr_analyzer.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/qpcr_analyzer"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
