@@ -1,3 +1,23 @@
+"""ΔCt and batch-aware ΔΔCt relative quantification.
+
+The two top-level functions both consume a *standardised* DataFrame produced
+by :func:`qpcr_analyzer.core.columns.apply_mapping` (columns ``Well``,
+``Target``, ``Sample``, ``Group``, ``Cq``, optional ``Excluded``) and return
+a ``dict`` keyed by housekeeping-gene name → result DataFrame, so callers
+can iterate through one sheet per HK gene without re-running the pipeline.
+
+Why two functions?
+    * :func:`compute_delta_ct` normalises against the housekeeping gene
+      only; no biological reference group is required. Useful for datasets
+      without a clear control or for sample-by-sample HK-normalised values.
+    * :func:`compute_delta_delta_ct` additionally normalises against a
+      *reference biological group*, anchoring its mean ΔCt at relative
+      expression = 1 within each batch. The exact invariant is
+      ``mean(ΔΔCt_ref) = 0`` per batch — ``mean(2^(−ΔΔCt)_ref) = 1`` only
+      when the reference samples have identical ΔCt, because exponentials
+      do not commute with averaging.
+"""
+
 from __future__ import annotations
 
 import numpy as np
@@ -5,38 +25,37 @@ import pandas as pd
 
 
 def compute_mean_cq(df: pd.DataFrame) -> pd.DataFrame:
-    """Mean Cq per (Target, Group, Sample), dropping wells with Excluded=True or NaN Cq."""
+    """Mean Cq per (Target, Group, Sample), dropping excluded/NaN wells."""
     data = df
     if "Excluded" in data.columns:
         data = data.loc[~data["Excluded"]]
     data = data.dropna(subset=["Cq"])
-    grouped = (
+    return (
         data.groupby(["Target", "Group", "Sample"], sort=False, as_index=False)["Cq"]
         .mean()
         .rename(columns={"Cq": "Mean_Cq"})
     )
-    return grouped
 
 
-def compute_relative_expression(
+def compute_delta_ct(
     df: pd.DataFrame,
     ref_genes: list[str],
-    reference_samples: dict[str, list[str]],
 ) -> dict[str, pd.DataFrame]:
-    """Group-aware ΔΔCq relative quantification.
+    """ΔCt = mean_Cq(Target) − mean_Cq(HK) for each Sample × Target.
 
-    For each housekeeping gene ``ref`` and each group, relative expression is
-    normalized against the mean ΔCq of that group's reference samples, so the
-    reference samples in every group anchor at 1.
+    This method normalises expression to the housekeeping gene only; no
+    reference group is involved.  The resulting ``dCt`` values can be
+    interpreted directly or converted to ``2^(−dCt)`` (``Expr_vs_HK``).
 
     Args:
-      df: data with columns Well, Target, Sample, Group, Cq and optional Excluded.
-      ref_genes: one or more housekeeping genes (names found in ``Target``).
-      reference_samples: mapping {group_name: [sample_name, ...]} of the anchor
-        samples for each group.
+        df: DataFrame with columns Well, Target, Sample, Group, Cq and
+            optional Excluded.
+        ref_genes: housekeeping gene names present in the Target column.
 
     Returns:
-      dict keyed by housekeeping gene → per-target result DataFrame.
+        dict keyed by housekeeping gene name → DataFrame with columns
+        Target, Group, Sample, Mean_Cq, Mean_Cq_{ref}, dCt, Expr_vs_HK,
+        Reference_Gene.
     """
     if not ref_genes:
         raise ValueError("At least one housekeeping gene is required.")
@@ -44,64 +63,124 @@ def compute_relative_expression(
     mean_cq = compute_mean_cq(df)
     if mean_cq.empty:
         raise ValueError("No data remains after excluding invalid wells.")
-    if mean_cq["Mean_Cq"].isna().any():
-        raise ValueError("NaN values present in mean Cq data.")
 
-    available_targets = set(mean_cq["Target"].unique())
-    missing = [r for r in ref_genes if r not in available_targets]
+    available = set(mean_cq["Target"].unique())
+    missing = [r for r in ref_genes if r not in available]
     if missing:
-        raise ValueError(f"Housekeeping gene(s) not in data: {missing}")
+        raise ValueError(f"Housekeeping gene(s) not found in data: {missing}")
 
     results: dict[str, pd.DataFrame] = {}
     for ref in ref_genes:
-        ref_df = (
+        ref_col = f"Mean_Cq_{ref}"
+        ref_cq = (
             mean_cq.loc[mean_cq["Target"] == ref, ["Sample", "Group", "Mean_Cq"]]
-            .rename(columns={"Mean_Cq": f"Mean_Cq_{ref}"})
+            .rename(columns={"Mean_Cq": ref_col})
         )
         target_df = mean_cq.loc[mean_cq["Target"] != ref].copy()
-        merged = target_df.merge(ref_df, on=["Sample", "Group"], how="left")
-        if merged[f"Mean_Cq_{ref}"].isna().any():
-            bad = merged.loc[merged[f"Mean_Cq_{ref}"].isna(), ["Sample", "Group"]]
+        merged = target_df.merge(ref_cq, on=["Sample", "Group"], how="left")
+        absent = merged[ref_col].isna()
+        if absent.any():
+            bad = merged.loc[absent, ["Sample", "Group"]].drop_duplicates()
             raise ValueError(
-                f"Housekeeping gene '{ref}' is missing for: "
-                f"{bad.drop_duplicates().to_dict(orient='records')}"
+                f"Housekeeping gene '{ref}' missing for samples: "
+                f"{bad.to_dict(orient='records')}"
             )
-        merged["dCq"] = merged["Mean_Cq"] - merged[f"Mean_Cq_{ref}"]
-        merged["Is_Reference"] = [
-            s in reference_samples.get(g, []) for s, g in zip(merged["Sample"], merged["Group"])
-        ]
-
-        anchor = (
-            merged.loc[merged["Is_Reference"]]
-            .groupby(["Group", "Target"], sort=False, as_index=False)["dCq"]
-            .mean()
-            .rename(columns={"dCq": "Ref_dCq"})
-        )
-        merged = merged.merge(anchor, on=["Group", "Target"], how="left")
-        missing_groups = (
-            merged.loc[merged["Ref_dCq"].isna(), "Group"].drop_duplicates().tolist()
-        )
-        if missing_groups:
-            raise ValueError(
-                f"No reference sample designated (or remaining) for group(s): {missing_groups}"
-            )
-        merged["ddCq"] = merged["dCq"] - merged["Ref_dCq"]
-        merged["Relative_Expr"] = np.power(2.0, -merged["ddCq"])
+        merged["dCt"] = merged["Mean_Cq"] - merged[ref_col]
+        merged["Expr_vs_HK"] = np.power(2.0, -merged["dCt"])
         merged["Reference_Gene"] = ref
+        results[ref] = merged[
+            ["Target", "Group", "Sample", "Mean_Cq", ref_col,
+             "dCt", "Expr_vs_HK", "Reference_Gene"]
+        ].reset_index(drop=True)
+    return results
 
+
+def compute_delta_delta_ct(
+    df: pd.DataFrame,
+    ref_genes: list[str],
+    reference_group: str,
+    sample_batches: dict[str, str] | None = None,
+) -> dict[str, pd.DataFrame]:
+    """Batch-aware ΔΔCt relative quantification.
+
+    Within each batch the mean ΔCt of *reference_group* samples anchors at
+    relative expression = 1.  Results from all batches are merged so that
+    cross-batch comparisons can be visualised together.
+
+    Args:
+        df: DataFrame with columns Well, Target, Sample, Group, Cq and
+            optional Excluded.
+        ref_genes: housekeeping gene names present in the Target column.
+        reference_group: the Group value whose samples serve as the ΔΔCt
+            denominator (their batch-mean relative expression = 1).
+        sample_batches: mapping {sample_name: batch_label}.  When None or a
+            sample is absent from the dict, that sample is assigned to
+            "batch_1" (i.e. all samples belong to a single batch by default).
+
+    Returns:
+        dict keyed by housekeeping gene name → DataFrame with columns
+        Target, Group, Sample, Batch, Mean_Cq, Mean_Cq_{ref},
+        dCt, Ref_dCt, ddCt, Relative_Expr,
+        Is_Reference_Group, Reference_Gene, Reference_Group.
+    """
+    if not ref_genes:
+        raise ValueError("At least one housekeeping gene is required.")
+
+    dct_results = compute_delta_ct(df, ref_genes)
+
+    all_samples = df["Sample"].unique()
+    if sample_batches is None:
+        batch_map: dict[str, str] = {str(s): "batch_1" for s in all_samples}
+    else:
+        batch_map = {str(s): sample_batches.get(str(s), "batch_1") for s in all_samples}
+
+    results: dict[str, pd.DataFrame] = {}
+    for ref, dct_df in dct_results.items():
+        dct_df = dct_df.copy()
+        dct_df["Batch"] = dct_df["Sample"].map(batch_map).fillna("batch_1")
+        dct_df["Is_Reference_Group"] = dct_df["Group"] == reference_group
+
+        ref_rows = dct_df[dct_df["Is_Reference_Group"]]
+        if ref_rows.empty:
+            available_groups = dct_df["Group"].unique().tolist()
+            raise ValueError(
+                f"Reference group '{reference_group}' not found in data. "
+                f"Available groups: {available_groups}"
+            )
+
+        # Per (Batch × Target): mean ΔCt of the reference group
+        anchor = (
+            ref_rows.groupby(["Batch", "Target"], sort=False, as_index=False)["dCt"]
+            .mean()
+            .rename(columns={"dCt": "Ref_dCt"})
+        )
+
+        # Verify every (Batch × Target) combination has a reference anchor
+        all_combos = dct_df[["Batch", "Target"]].drop_duplicates()
+        check = all_combos.merge(anchor, on=["Batch", "Target"], how="left")
+        missing = check[check["Ref_dCt"].isna()]
+        if not missing.empty:
+            pairs = missing[["Batch", "Target"]].to_dict(orient="records")
+            raise ValueError(
+                f"Reference group '{reference_group}' has no samples in "
+                f"the following (batch, target) combinations: {pairs}. "
+                "Ensure every batch contains at least one reference-group sample "
+                "for every measured target."
+            )
+
+        merged = dct_df.merge(anchor, on=["Batch", "Target"], how="left")
+        merged["ddCt"] = merged["dCt"] - merged["Ref_dCt"]
+        merged["Relative_Expr"] = np.power(2.0, -merged["ddCt"])
+        merged["Reference_Gene"] = ref
+        merged["Reference_Group"] = reference_group
+
+        ref_col = f"Mean_Cq_{ref}"
         results[ref] = merged[
             [
-                "Target",
-                "Group",
-                "Sample",
-                "Mean_Cq",
-                f"Mean_Cq_{ref}",
-                "dCq",
-                "Ref_dCq",
-                "ddCq",
-                "Relative_Expr",
-                "Is_Reference",
-                "Reference_Gene",
+                "Target", "Group", "Sample", "Batch",
+                "Mean_Cq", ref_col,
+                "dCt", "Ref_dCt", "ddCt", "Relative_Expr",
+                "Is_Reference_Group", "Reference_Gene", "Reference_Group",
             ]
         ].reset_index(drop=True)
     return results

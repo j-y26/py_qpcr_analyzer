@@ -1,3 +1,12 @@
+"""Replicate-outlier flagging.
+
+For every (Sample, Target) group, find the tightest cluster of replicates
+whose Cq range is within a user tolerance (default 1 cycle) and flag the
+rest. NaN Cq values are always flagged. The cluster rule is a generalisation
+of the classic R "closest-pair" triplicate rule that works for any number
+of replicates ≥ 1.
+"""
+
 from __future__ import annotations
 
 import numpy as np

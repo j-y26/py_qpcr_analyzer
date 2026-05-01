@@ -1,3 +1,20 @@
+"""NiceGUI front-end for qPCR Analyzer.
+
+This module is a thin presentation layer over :mod:`qpcr_analyzer.core`.
+All scientific logic lives in ``core/``; this file only:
+
+1. Renders a five-step :class:`nicegui.ui.stepper`:
+   upload → column mapping → groups & batches → reference + outliers → results.
+2. Carries per-session state in a plain ``dict`` returned by
+   :func:`_new_state` (NiceGUI binds one ``index()`` page per browser
+   connection, so this dict is effectively per-session).
+3. Calls into ``core`` to do the heavy lifting and renders the returned
+   DataFrames as Plotly bar charts plus an Excel download button.
+
+Run with :func:`start` or via the ``qpcr-analyzer`` console script (see
+:mod:`qpcr_analyzer.__main__`).
+"""
+
 from __future__ import annotations
 
 import io
@@ -13,11 +30,13 @@ from qpcr_analyzer.core import (
     ROLE_LABELS,
     ROLES,
     apply_mapping,
-    compute_relative_expression,
+    compute_delta_ct,
+    compute_delta_delta_ct,
     detect_columns,
     mark_outliers,
     read_table,
     results_to_xlsx_bytes,
+    validate_sample_groups,
 )
 from qpcr_analyzer.core.columns import REQUIRED
 
@@ -26,23 +45,38 @@ PALETTE = ["#2563eb", "#0ea5e9", "#14b8a6", "#f59e0b", "#ef4444", "#a855f7"]
 
 
 def _new_state() -> dict:
+    """Build a fresh per-session state dict.
+
+    Each browser connection gets its own ``state`` instance; nothing is
+    shared between users. Keys mirror the five UI steps so each step can
+    read what previous steps produced.
+    """
     return {
         "filename": None,
         "raw_df": None,
         "mapping": None,
         "standardized": None,
+        "sample_batches": {},       # {sample: batch_label}
+        "reference_group": None,    # group used as ΔΔCt anchor
         "tolerance": 1.0,
         "flagged": None,
         "excluded_wells": set(),
         "_outliers_initialized": False,
-        "reference_samples": {},
         "ref_genes": [],
-        "results": None,
+        "dct_results": None,
+        "ddct_results": None,
     }
 
 
 @ui.page("/")
 def index() -> None:
+    """Render the single-page stepper UI.
+
+    NiceGUI calls this function once per browser connection. ``state``
+    holds analysis data and ``refs`` holds handles to UI widgets that
+    later render-helpers need to mutate (e.g. the outlier table after the
+    user changes the tolerance).
+    """
     state = _new_state()
     refs: dict[str, Any] = {}
 
@@ -54,7 +88,7 @@ def index() -> None:
         with ui.row().classes("items-center gap-3"):
             ui.icon("biotech", size="28px").classes("text-blue-600")
             ui.label("qPCR Analyzer").classes("text-xl font-semibold")
-            ui.label("· lightweight relative quantification").classes(
+            ui.label("· ΔCt & batch-aware ΔΔCt quantification").classes(
                 "text-sm text-slate-500"
             )
         ui.space()
@@ -67,24 +101,30 @@ def index() -> None:
         ) as stepper:
             refs["stepper"] = stepper
 
+            # ── Step 1: Upload ────────────────────────────────────────────────
             with ui.step("upload", title="Upload data", icon="upload_file"):
                 ui.markdown(
-                    "Upload a qPCR dataset. Supported formats: **xlsx, xls, csv, "
-                    "tsv, txt**. One row per well."
+                    "Upload a qPCR results file.  "
+                    "Supported formats: **xlsx, xls, csv, tsv, txt**.  "
+                    "One row per well."
                 ).classes("text-slate-700")
 
                 async def on_upload(e: events.UploadEventArguments) -> None:
+                    # NiceGUI 3.x: the event carries a single ``file`` attribute
+                    # (FileUpload) with async ``read()`` and a ``name`` field.
+                    # Older 2.x exposed ``e.content`` / ``e.name`` directly.
                     try:
-                        raw_bytes = e.content.read()
-                        df = read_table(io.BytesIO(raw_bytes), e.name)
+                        data = await e.file.read()
+                        name = e.file.name
+                        df = read_table(io.BytesIO(data), name)
                     except Exception as ex:  # noqa: BLE001
                         ui.notify(f"Failed to read file: {ex}", type="negative")
                         return
-                    state["filename"] = e.name
+                    state["filename"] = name
                     state["raw_df"] = df
                     state["mapping"] = detect_columns(df)
                     refs["file_info"].set_text(
-                        f"Loaded {e.name} — {len(df)} rows × {len(df.columns)} columns"
+                        f"Loaded {name} — {len(df)} rows × {len(df.columns)} columns"
                     )
                     _render_mapping(state, refs)
                     refs["upload_next"].enable()
@@ -101,10 +141,11 @@ def index() -> None:
                     )
                     refs["upload_next"].disable()
 
+            # ── Step 2: Column mapping ────────────────────────────────────────
             with ui.step("mapping", title="Column mapping", icon="view_column"):
                 ui.markdown(
-                    "Confirm or adjust how each column is used. Auto-detected "
-                    "columns show a green check; required roles are marked."
+                    "Confirm or adjust which column plays each role.  "
+                    "Auto-detected columns show a green badge; required roles are marked."
                 ).classes("text-slate-700")
                 refs["mapping_container"] = ui.column().classes("w-full gap-2")
 
@@ -124,10 +165,17 @@ def index() -> None:
                             type="negative",
                         )
                         return
+                    # Validate sample↔group consistency
+                    sg_errs = validate_sample_groups(std)
+                    if sg_errs:
+                        for msg in sg_errs:
+                            ui.notify(msg, type="negative")
+                        return
                     state["standardized"] = std
                     state["_outliers_initialized"] = False
                     state["excluded_wells"] = set()
-                    state["reference_samples"] = {}
+                    state["sample_batches"] = {}
+                    state["reference_group"] = None
                     _render_groups(state, refs)
                     stepper.next()
 
@@ -137,29 +185,23 @@ def index() -> None:
                         "color=primary unelevated"
                     )
 
-            with ui.step("groups", title="Groups & reference samples", icon="groups"):
+            # ── Step 3: Groups & batches ──────────────────────────────────────
+            with ui.step("groups", title="Groups & batches", icon="groups"):
                 ui.markdown(
-                    "Mark the reference samples in each group. Relative expression "
-                    "within a group is anchored so the mean of its reference "
-                    "samples equals 1. Single-group datasets default to all "
-                    "samples as reference."
+                    "Verify group assignments and optionally assign samples to "
+                    "**batches** (experimental runs).  "
+                    "The ΔΔCt method normalises within each batch before merging.  "
+                    "Leave all samples in *batch_1* if your data comes from a single run."
                 ).classes("text-slate-700")
                 refs["groups_container"] = ui.column().classes("w-full gap-3")
 
                 def go_to_outliers() -> None:
-                    ref_map: dict[str, list[str]] = {}
-                    switches = refs.get("group_switches", {})
-                    for group, sw_map in switches.items():
-                        chosen = [s for s, sw in sw_map.items() if sw.value]
-                        if not chosen:
-                            ui.notify(
-                                f"Group '{group}' has no reference sample "
-                                "selected — mark at least one.",
-                                type="negative",
-                            )
-                            return
-                        ref_map[group] = chosen
-                    state["reference_samples"] = ref_map
+                    # Collect batch assignments from the UI widgets
+                    batch_map: dict[str, str] = {}
+                    for sample, widget in refs.get("batch_inputs", {}).items():
+                        val = (widget.value or "").strip() or "batch_1"
+                        batch_map[sample] = val
+                    state["sample_batches"] = batch_map
                     _render_outliers(state, refs)
                     stepper.next()
 
@@ -169,11 +211,12 @@ def index() -> None:
                         "color=primary unelevated"
                     )
 
-            with ui.step("outliers", title="Outlier review", icon="rule"):
+            # ── Step 4: Reference group, HK genes & outliers ─────────────────
+            with ui.step("outliers", title="Reference & outlier review", icon="rule"):
                 ui.markdown(
-                    "Wells with NaN Cq or replicate disagreement beyond the "
-                    "tolerance are pre-selected for exclusion. Adjust as needed, "
-                    "then choose housekeeping gene(s) and run the analysis."
+                    "Choose the **reference group** (ΔΔCt anchor, expression = 1) "
+                    "and **housekeeping gene(s)**, set the replicate tolerance, "
+                    "then review flagged wells before running the analysis."
                 ).classes("text-slate-700")
                 refs["outlier_container"] = ui.column().classes("w-full gap-3")
 
@@ -182,22 +225,31 @@ def index() -> None:
                         return
                     if not state["ref_genes"]:
                         ui.notify(
-                            "Select at least one housekeeping gene.",
-                            type="negative",
+                            "Select at least one housekeeping gene.", type="negative"
                         )
                         return
+                    ref_group = refs.get("ref_group_sel") and refs["ref_group_sel"].value
+                    if not ref_group:
+                        ui.notify(
+                            "Select a reference group for ΔΔCt.", type="negative"
+                        )
+                        return
+                    state["reference_group"] = ref_group
                     std = state["standardized"].copy()
                     std["Excluded"] = std["Well"].isin(state["excluded_wells"])
                     try:
-                        results = compute_relative_expression(
+                        dct = compute_delta_ct(std, list(state["ref_genes"]))
+                        ddct = compute_delta_delta_ct(
                             std,
                             list(state["ref_genes"]),
-                            state["reference_samples"],
+                            reference_group=ref_group,
+                            sample_batches=state["sample_batches"] or None,
                         )
                     except Exception as ex:  # noqa: BLE001
                         ui.notify(f"Analysis failed: {ex}", type="negative")
                         return
-                    state["results"] = results
+                    state["dct_results"] = dct
+                    state["ddct_results"] = ddct
                     _render_results(state, refs)
                     stepper.next()
 
@@ -207,6 +259,7 @@ def index() -> None:
                         "color=primary unelevated icon=play_arrow"
                     )
 
+            # ── Step 5: Results ───────────────────────────────────────────────
             with ui.step("results", title="Results", icon="bar_chart"):
                 refs["results_container"] = ui.column().classes("w-full gap-4")
                 with ui.stepper_navigation():
@@ -218,11 +271,13 @@ def index() -> None:
                     ).props("flat")
 
 
+# ── Render helpers ────────────────────────────────────────────────────────────
+
 def _render_mapping(state: dict, refs: dict) -> None:
     container = refs["mapping_container"]
     container.clear()
     cols = list(state["raw_df"].columns)
-    options = ["(none)"] + list(cols)
+    options = ["(none)"] + cols
     mapping = state["mapping"]
 
     with container:
@@ -230,14 +285,14 @@ def _render_mapping(state: dict, refs: dict) -> None:
             current = mapping.assignments.get(role)
             conf = mapping.confidence.get(role, 0.0)
             required = role in REQUIRED
-            with ui.row().classes("w-full items-center gap-3 q-mb-xs"):
+            with ui.row().classes("w-full items-center gap-3"):
                 ui.label(ROLE_LABELS[role]).classes("w-28 font-medium")
                 sel = ui.select(
                     options=options,
                     value=current if current else "(none)",
                 ).classes("flex-grow").props("outlined dense")
 
-                def _on_change(e, role=role, sel=sel) -> None:
+                def _on_change(e, role=role, sel=sel) -> None:  # noqa: ARG001
                     v = sel.value
                     mapping.assignments[role] = None if v == "(none)" else v
 
@@ -253,8 +308,7 @@ def _render_mapping(state: dict, refs: dict) -> None:
                     )
 
                 if current is not None:
-                    badge = ui.badge(f"auto · {conf:.0%}", color="green")
-                    badge.classes("text-white")
+                    ui.badge(f"auto · {conf:.0%}", color="green").classes("text-white")
                 elif required:
                     ui.badge("unmatched", color="red").classes("text-white")
                 else:
@@ -265,62 +319,94 @@ def _render_groups(state: dict, refs: dict) -> None:
     container = refs["groups_container"]
     container.clear()
     df = state["standardized"]
-    samples_by_group = (
-        df[["Group", "Sample"]]
+
+    samples_meta = (
+        df[["Sample", "Group"]]
         .drop_duplicates()
-        .groupby("Group", sort=False)["Sample"]
-        .apply(list)
-        .to_dict()
+        .sort_values(["Group", "Sample"])
+        .reset_index(drop=True)
     )
-    single_group = len(samples_by_group) == 1
-    refs["group_switches"] = {}
+    groups = samples_meta["Group"].unique().tolist()
+
+    refs["batch_inputs"] = {}
 
     with container:
-        if single_group:
-            ui.label(
-                "Single group detected — by default every sample is a reference "
-                "(relative expression centers on 1). Toggle below if a subset "
-                "should anchor instead."
-            ).classes("text-sm text-slate-600")
+        ui.label(
+            f"{len(samples_meta)} unique sample(s) across {len(groups)} group(s)"
+        ).classes("text-sm text-slate-600")
 
-        for group, samples in samples_by_group.items():
-            with ui.card().classes("w-full border border-slate-200 shadow-none"):
-                with ui.row().classes("items-center w-full"):
-                    ui.label(f"Group: {group}").classes("text-base font-semibold")
-                    ui.label(f"{len(samples)} sample(s)").classes(
-                        "text-xs text-slate-500"
-                    )
-                    ui.space()
+        with ui.card().classes("w-full border border-slate-200 shadow-none"):
+            columns = [
+                {"name": "Sample", "label": "Sample", "field": "Sample",
+                 "align": "left", "sortable": True},
+                {"name": "Group", "label": "Group", "field": "Group",
+                 "align": "left", "sortable": True},
+                {"name": "Batch", "label": "Batch", "field": "Batch",
+                 "align": "left"},
+            ]
+            rows = [
+                {"Sample": r.Sample, "Group": r.Group, "Batch": "batch_1"}
+                for r in samples_meta.itertuples()
+            ]
+            table = ui.table(
+                columns=columns, rows=rows, row_key="Sample"
+            ).classes("w-full")
+            table.add_slot(
+                "body",
+                r"""
+                <q-tr :props="props">
+                  <q-td key="Sample" :props="props">{{ props.row.Sample }}</q-td>
+                  <q-td key="Group"  :props="props">{{ props.row.Group }}</q-td>
+                  <q-td key="Batch"  :props="props">
+                    <q-input
+                      v-model="props.row.Batch"
+                      dense outlined
+                      style="min-width:120px"
+                      @update:model-value="() => $emit('batch-change', {sample: props.row.Sample, batch: props.row.Batch})"
+                    />
+                  </q-td>
+                </q-tr>
+                """,
+            )
 
-                    def _mark_all(g=group) -> None:
-                        for sw in refs["group_switches"][g].values():
-                            sw.value = True
+            # Capture batch edits emitted from the Quasar template
+            def _on_batch_change(e) -> None:
+                sample = e.args.get("sample")
+                batch = (e.args.get("batch") or "").strip() or "batch_1"
+                if sample:
+                    state["sample_batches"][str(sample)] = batch
 
-                    def _clear_all(g=group) -> None:
-                        for sw in refs["group_switches"][g].values():
-                            sw.value = False
+            table.on("batch-change", _on_batch_change)
 
-                    ui.button("All", on_click=_mark_all).props("flat dense size=sm")
-                    ui.button("None", on_click=_clear_all).props(
-                        "flat dense size=sm"
-                    )
-
-                sw_map: dict[str, Any] = {}
-                with ui.row().classes("flex-wrap gap-x-4 gap-y-1"):
-                    for s in samples:
-                        sw = ui.switch(s, value=single_group).props("dense")
-                        sw_map[s] = sw
-                refs["group_switches"][group] = sw_map
+        ui.label(
+            "Leave all batch fields as 'batch_1' if your samples come "
+            "from a single experimental run."
+        ).classes("text-xs text-slate-400 mt-1")
 
 
 def _render_outliers(state: dict, refs: dict) -> None:
     container = refs["outlier_container"]
     container.clear()
     df = state["standardized"]
+    groups = df["Group"].unique().tolist()
     targets = df["Target"].unique().tolist()
 
     with container:
         with ui.row().classes("w-full items-end gap-4 flex-wrap"):
+            ref_group_sel = ui.select(
+                options=groups,
+                label="Reference group (ΔΔCt anchor)",
+                value=state.get("reference_group") or groups[0],
+            ).classes("flex-grow min-w-48").props("outlined dense")
+            refs["ref_group_sel"] = ref_group_sel
+
+            ref_gene_sel = ui.select(
+                options=targets,
+                label="Housekeeping gene(s)",
+                multiple=True,
+                value=state["ref_genes"],
+            ).classes("flex-grow min-w-64").props("outlined dense use-chips")
+
             tol_input = ui.number(
                 label="Replicate tolerance (cycles)",
                 value=state["tolerance"],
@@ -328,12 +414,6 @@ def _render_outliers(state: dict, refs: dict) -> None:
                 step=0.1,
                 format="%.2f",
             ).classes("w-48").props("outlined dense")
-            ref_sel = ui.select(
-                options=targets,
-                label="Housekeeping gene(s)",
-                multiple=True,
-                value=state["ref_genes"],
-            ).classes("flex-grow min-w-64").props("outlined dense use-chips")
 
             def _apply() -> None:
                 try:
@@ -343,14 +423,12 @@ def _render_outliers(state: dict, refs: dict) -> None:
                 if new_tol != state["tolerance"]:
                     state["tolerance"] = new_tol
                     state["_outliers_initialized"] = False
-                state["ref_genes"] = list(ref_sel.value or [])
+                state["ref_genes"] = list(ref_gene_sel.value or [])
                 _rebuild_outlier_table(state, refs)
 
             ui.button("Apply", on_click=_apply).props("color=primary outline")
 
-        refs["outlier_summary_slot"] = ui.label("").classes(
-            "text-sm text-slate-600"
-        )
+        refs["outlier_summary_slot"] = ui.label("").classes("text-sm text-slate-600")
         refs["outlier_table_slot"] = ui.column().classes("w-full")
         refs["excluded_select_slot"] = ui.column().classes("w-full")
         _rebuild_outlier_table(state, refs)
@@ -364,9 +442,7 @@ def _rebuild_outlier_table(state: dict, refs: dict) -> None:
 
     flagged = mark_outliers(state["standardized"], tolerance=state["tolerance"])
     state["flagged"] = flagged
-    auto_wells = flagged.loc[
-        flagged["Outlier"] & flagged["Cq"].notna(), "Well"
-    ].tolist()
+    auto_wells = flagged.loc[flagged["Outlier"] & flagged["Cq"].notna(), "Well"].tolist()
     nan_wells = flagged.loc[flagged["Cq"].isna(), "Well"].tolist()
     if not state.get("_outliers_initialized"):
         state["excluded_wells"] = set(auto_wells) | set(nan_wells)
@@ -385,9 +461,10 @@ def _rebuild_outlier_table(state: dict, refs: dict) -> None:
             "Sample": r.Sample,
             "Cq": None if pd.isna(r.Cq) else round(float(r.Cq), 3),
             "Replicates": int(r.Replicates),
-            "Flag": "⚠ outlier"
-            if bool(r.Outlier) and not pd.isna(r.Cq)
-            else ("— NA —" if pd.isna(r.Cq) else "ok"),
+            "Flag": (
+                "⚠ outlier" if bool(r.Outlier) and not pd.isna(r.Cq)
+                else ("— NA —" if pd.isna(r.Cq) else "ok")
+            ),
             "_flagged": bool(r.Outlier),
         }
         for r in df.itertuples()
@@ -399,10 +476,7 @@ def _rebuild_outlier_table(state: dict, refs: dict) -> None:
 
     with slot:
         table = ui.table(
-            columns=columns,
-            rows=rows,
-            row_key="Well",
-            pagination=15,
+            columns=columns, rows=rows, row_key="Well", pagination=15
         ).classes("w-full")
         table.add_slot(
             "body",
@@ -456,35 +530,77 @@ def _render_results(state: dict, refs: dict) -> None:
             def _download() -> None:
                 std = state["standardized"].copy()
                 std["Excluded"] = std["Well"].isin(state["excluded_wells"])
-                data = results_to_xlsx_bytes(std, state["results"])
+                data = results_to_xlsx_bytes(
+                    std, state["dct_results"], state["ddct_results"]
+                )
                 out_name = f"qpcr_results_{Path(filename).stem}.xlsx"
                 ui.download(data, out_name)
 
-            ui.button(
-                "Download xlsx", icon="download", on_click=_download
-            ).props("color=primary unelevated")
+            ui.button("Download xlsx", icon="download", on_click=_download).props(
+                "color=primary unelevated"
+            )
 
-        for ref, res_df in state["results"].items():
-            with ui.card().classes("w-full border border-slate-200 shadow-none"):
-                with ui.row().classes("items-center gap-3"):
-                    ui.label(f"Housekeeping: {ref}").classes(
-                        "text-base font-semibold"
+        ref_group = state["reference_group"]
+        batches = sorted(set(state["sample_batches"].values())) if state["sample_batches"] else ["batch_1"]
+        ui.label(
+            f"Reference group: {ref_group}  ·  "
+            f"Batch(es): {', '.join(batches)}"
+        ).classes("text-sm text-slate-500")
+
+        with ui.tabs().classes("w-full") as tabs:
+            tab_dct = ui.tab("ΔCt", icon="show_chart")
+            tab_ddct = ui.tab("ΔΔCt (relative expression)", icon="bar_chart")
+
+        with ui.tab_panels(tabs, value=tab_dct).classes("w-full"):
+            with ui.tab_panel(tab_dct):
+                ui.markdown(
+                    "**ΔCt** = mean Cq(target) − mean Cq(housekeeping gene), "
+                    "per sample.  No reference group normalisation.  "
+                    "Lower ΔCt = higher expression relative to the housekeeping gene."
+                ).classes("text-sm text-slate-600 mb-2")
+                _render_result_cards(
+                    state["dct_results"], value_col="dCt",
+                    y_label="ΔCt", invert_y=False
+                )
+
+            with ui.tab_panel(tab_ddct):
+                ui.markdown(
+                    f"**ΔΔCt** relative expression: "
+                    f"2^(−ΔΔCt), normalised so that *{ref_group}* = 1 within each batch."
+                ).classes("text-sm text-slate-600 mb-2")
+                _render_result_cards(
+                    state["ddct_results"], value_col="Relative_Expr",
+                    y_label="Relative expression (2^−ΔΔCt)", invert_y=False
+                )
+
+
+def _render_result_cards(
+    results: dict[str, pd.DataFrame],
+    value_col: str,
+    y_label: str,
+    invert_y: bool,
+) -> None:
+    for ref, res_df in results.items():
+        with ui.card().classes("w-full border border-slate-200 shadow-none"):
+            with ui.row().classes("items-center gap-3"):
+                ui.label(f"Housekeeping: {ref}").classes("text-base font-semibold")
+                ui.label(
+                    f"{res_df['Target'].nunique()} target(s) · "
+                    f"{res_df['Group'].nunique()} group(s) · "
+                    f"{res_df['Sample'].nunique()} sample(s)"
+                ).classes("text-xs text-slate-500")
+
+            targets = res_df["Target"].unique().tolist()
+            groups = res_df["Group"].unique().tolist()
+            use_group = len(groups) > 1
+            cols = 1 if len(targets) == 1 else 2
+            with ui.grid(columns=cols).classes("w-full gap-3"):
+                for target in targets:
+                    sub = res_df[res_df["Target"] == target]
+                    fig = _plot_figure(
+                        sub, target, ref, use_group, value_col, y_label, invert_y
                     )
-                    ui.label(
-                        f"{res_df['Target'].nunique()} target(s) · "
-                        f"{res_df['Group'].nunique()} group(s) · "
-                        f"{res_df['Sample'].nunique()} sample(s)"
-                    ).classes("text-xs text-slate-500")
-
-                groups = res_df["Group"].unique().tolist()
-                use_group = len(groups) > 1
-                targets = res_df["Target"].unique().tolist()
-                cols = 1 if len(targets) == 1 else 2
-                with ui.grid(columns=cols).classes("w-full gap-3"):
-                    for target in targets:
-                        sub = res_df[res_df["Target"] == target]
-                        fig = _plot_figure(sub, target, ref, use_group)
-                        ui.plotly(fig).classes("w-full h-80")
+                    ui.plotly(fig).classes("w-full h-80")
 
 
 def _plot_figure(
@@ -492,10 +608,13 @@ def _plot_figure(
     target: str,
     ref: str,
     use_group: bool,
+    value_col: str,
+    y_label: str,
+    invert_y: bool,
 ) -> go.Figure:
     x_col = "Group" if use_group else "Sample"
     summary = (
-        df.groupby(x_col, sort=False)["Relative_Expr"]
+        df.groupby(x_col, sort=False)[value_col]
         .agg(["mean", "std", "count"])
         .reset_index()
         .fillna(0)
@@ -514,16 +633,17 @@ def _plot_figure(
     if use_group:
         fig.add_scatter(
             x=df[x_col],
-            y=df["Relative_Expr"],
+            y=df[value_col],
             mode="markers",
             marker=dict(color="#0f172a", size=6, opacity=0.75),
             name="samples",
-            hovertemplate="%{x}<br>%{customdata}<br>rel = %{y:.3f}<extra></extra>",
+            hovertemplate="%{x}<br>%{customdata}<br>val = %{y:.3f}<extra></extra>",
             customdata=df["Sample"],
         )
     fig.update_layout(
         title=dict(text=f"{target} / {ref}", x=0.5, xanchor="center"),
-        yaxis_title=f"{target} / {ref}",
+        yaxis_title=y_label,
+        yaxis_autorange="reversed" if invert_y else True,
         xaxis_title="",
         template="plotly_white",
         showlegend=False,
@@ -534,8 +654,24 @@ def _plot_figure(
 
 
 def start(host: str | None = None, port: int | None = None) -> None:
+    """Launch the NiceGUI server (blocking).
+
+    Args:
+        host: Bind address. Falls back to ``$QPCR_HOST`` and finally
+            ``"127.0.0.1"`` (loopback only — change to ``"0.0.0.0"`` to
+            expose on the LAN).
+        port: TCP port. Falls back to ``$QPCR_PORT`` and finally ``8090``.
+            Port 8080 is intentionally avoided because Thermo Fisher's
+            *Design & Analysis* software (commonly used to inspect qPCR
+            raw data on the same machine) listens there.
+
+    The call blocks until the server is stopped. ``reload=False`` is set
+    so the package works correctly when installed (NiceGUI's hot-reload
+    requires a writable source tree). ``show=False`` prevents NiceGUI from
+    auto-opening a browser tab — the user opens the printed URL manually.
+    """
     host = host or os.environ.get("QPCR_HOST", "127.0.0.1")
-    port = int(port or os.environ.get("QPCR_PORT", 8080))
+    port = int(port or os.environ.get("QPCR_PORT", 8090))
     ui.run(
         title="qPCR Analyzer",
         host=host,
@@ -544,6 +680,7 @@ def start(host: str | None = None, port: int | None = None) -> None:
         show=False,
         favicon="🧬",
     )
+
 
 
 if __name__ in {"__main__", "__mp_main__"}:
