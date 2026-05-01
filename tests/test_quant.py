@@ -6,6 +6,7 @@ from qpcr_analyzer.core.quant import (
     compute_delta_ct,
     compute_delta_delta_ct,
     compute_mean_cq,
+    samples_missing_hk,
 )
 
 
@@ -235,3 +236,97 @@ def test_ddct_multiple_ref_genes():
     for ref, r in res.items():
         ctrl_val = r[r["Sample"] == "s1"]["Relative_Expr"].iloc[0]
         assert abs(ctrl_val - 1.0) < 1e-9
+
+
+# ── samples_missing_hk + per-HK sample exclusion ──────────────────────────────
+
+def test_samples_missing_hk_finds_no_hk_samples():
+    """Sample with all-NaN HK Cq should appear in the missing-HK list."""
+    df = _make_df(
+        targets=["gapdh", "geneX", "gapdh", "geneX"],
+        samples=["s1", "s1", "s2", "s2"],
+        groups=["ctrl", "ctrl", "ctrl", "ctrl"],
+        cq_values=[18.0, 22.0, float("nan"), 23.0],
+    )
+    missing = samples_missing_hk(df, ["gapdh"])
+    assert missing == {"gapdh": ["s2"]}
+
+
+def test_samples_missing_hk_ignores_excluded_only():
+    """Sample whose HK wells are all Excluded counts as missing HK."""
+    df = _make_df(
+        targets=["gapdh", "geneX"],
+        samples=["s1", "s1"],
+        groups=["ctrl", "ctrl"],
+        cq_values=[18.0, 22.0],
+        excluded=[True, False],
+    )
+    missing = samples_missing_hk(df, ["gapdh"])
+    assert missing == {"gapdh": ["s1"]}
+
+
+def test_dct_per_hk_sample_exclusion_drops_only_that_hk():
+    """A sample listed in per-HK exclusion is dropped for that HK only."""
+    df = _make_df(
+        targets=["gapdh", "actb", "geneX"] * 2,
+        samples=["s1"] * 3 + ["s2"] * 3,
+        groups=["ctrl"] * 3 + ["ctrl"] * 3,
+        cq_values=[18.0, 19.0, 22.0, 18.0, 19.0, 22.0],
+    )
+    res = compute_delta_ct(
+        df, ["gapdh", "actb"],
+        sample_excludes_per_hk={"gapdh": {"s1"}},
+    )
+    # gapdh sheet excludes s1; actb sheet keeps s1
+    assert set(res["gapdh"]["Sample"].unique()) == {"s2"}
+    assert set(res["actb"]["Sample"].unique()) == {"s1", "s2"}
+
+
+def test_dct_global_exclude_drops_from_every_hk():
+    df = _make_df(
+        targets=["gapdh", "actb", "geneX"] * 2,
+        samples=["s1"] * 3 + ["s2"] * 3,
+        groups=["ctrl"] * 3 + ["ctrl"] * 3,
+        cq_values=[18.0, 19.0, 22.0, 18.0, 19.0, 22.0],
+    )
+    res = compute_delta_ct(
+        df, ["gapdh", "actb"],
+        sample_excludes_per_hk={"*": {"s1"}},
+    )
+    for r in res.values():
+        assert "s1" not in set(r["Sample"].unique())
+
+
+def test_dct_missing_hk_now_recoverable_via_per_hk_exclusion():
+    """If sample lacks HK Cq but is listed as excluded for that HK, no error."""
+    df = _make_df(
+        targets=["gapdh", "geneX", "gapdh", "geneX"],
+        samples=["s1", "s1", "s2", "s2"],
+        groups=["ctrl", "ctrl", "ctrl", "ctrl"],
+        cq_values=[18.0, 22.0, float("nan"), 23.0],
+    )
+    # Without exclusion: raises (s2 has no gapdh)
+    import pytest
+
+    with pytest.raises(ValueError, match="missing for samples"):
+        compute_delta_ct(df, ["gapdh"])
+    # With exclusion: works, s2 dropped
+    res = compute_delta_ct(
+        df, ["gapdh"], sample_excludes_per_hk={"gapdh": {"s2"}}
+    )
+    assert set(res["gapdh"]["Sample"].unique()) == {"s1"}
+
+
+def test_ddct_forwards_per_hk_exclusion():
+    df = _make_df(
+        targets=["gapdh", "geneX"] * 3,
+        samples=["s1", "s1", "s2", "s2", "s3", "s3"],
+        groups=["ctrl", "ctrl", "ctrl", "ctrl", "treat", "treat"],
+        cq_values=[18, 22, 18, 21, 18, 23],
+    )
+    res = compute_delta_delta_ct(
+        df, ["gapdh"], reference_group="ctrl",
+        sample_excludes_per_hk={"gapdh": {"s2"}},
+    )
+    assert "s2" not in set(res["gapdh"]["Sample"].unique())
+    assert {"s1", "s3"} <= set(res["gapdh"]["Sample"].unique())

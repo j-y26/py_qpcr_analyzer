@@ -28,13 +28,14 @@ from dataclasses import dataclass, field
 import pandas as pd
 from rapidfuzz import fuzz
 
-ROLES = ("well", "target", "sample", "cq", "group")
+ROLES = ("well", "target", "sample", "cq", "group", "batch")
 ROLE_LABELS = {
     "well": "Well",
     "target": "Target",
     "sample": "Sample",
     "cq": "Cq",
     "group": "Group",
+    "batch": "Batch",
 }
 REQUIRED = ("well", "target", "sample", "cq")
 
@@ -50,6 +51,20 @@ SYNONYMS: dict[str, list[str]] = {
         "condition",
         "treatment",
         "biologicalsetname",
+    ],
+    "batch": [
+        "batch",
+        "batches",
+        "batchid",
+        "batchname",
+        "run",
+        "runid",
+        "runname",
+        "plate",
+        "plateid",
+        "platename",
+        "experiment",
+        "experimentid",
     ],
 }
 
@@ -208,6 +223,27 @@ def validate_sample_groups(df: pd.DataFrame) -> list[str]:
     return errors
 
 
+def validate_sample_batches(df: pd.DataFrame) -> list[str]:
+    """Check that each sample belongs to exactly one batch.
+
+    Args:
+        df: DataFrame with 'Sample' and 'Batch' columns (standardised names).
+            If 'Batch' is absent, returns an empty list (nothing to validate).
+
+    Returns:
+        List of error strings, empty when data is valid.
+    """
+    if "Batch" not in df.columns:
+        return []
+    errors: list[str] = []
+    per_sample = df.groupby("Sample")["Batch"].nunique()
+    multi = per_sample[per_sample > 1].index.tolist()
+    for sample in multi:
+        batches = sorted(df.loc[df["Sample"] == sample, "Batch"].unique())
+        errors.append(f"Sample '{sample}' belongs to multiple batches: {batches}")
+    return errors
+
+
 def apply_mapping(df: pd.DataFrame, mapping: ColumnMapping) -> pd.DataFrame:
     """Project ``df`` to canonical columns and coerce types.
 
@@ -235,4 +271,6 @@ def apply_mapping(df: pd.DataFrame, mapping: ColumnMapping) -> pd.DataFrame:
     out["Well"] = out["Well"].astype(str)
     out["Target"] = out["Target"].astype(str)
     out["Sample"] = out["Sample"].astype(str)
+    if "Batch" in out.columns:
+        out["Batch"] = out["Batch"].fillna("batch_1").astype(str)
     return out

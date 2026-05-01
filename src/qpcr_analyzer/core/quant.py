@@ -37,9 +37,39 @@ def compute_mean_cq(df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+def samples_missing_hk(
+    df: pd.DataFrame, ref_genes: list[str]
+) -> dict[str, list[str]]:
+    """Return samples that have no usable HK Cq for each housekeeping gene.
+
+    "No usable HK Cq" means: every well of that sample × HK pair is either
+    NaN or marked Excluded, so the sample's mean HK Cq cannot be computed.
+    The UI uses this to surface affected samples to the user for manual
+    confirmation before silently dropping them from analysis.
+
+    Args:
+        df: DataFrame with columns Sample, Target, Cq and optional Excluded.
+        ref_genes: housekeeping gene names to check.
+
+    Returns:
+        dict keyed by HK gene → list of sample names with no valid HK Cq.
+        Genes with no missing samples are still present with an empty list.
+    """
+    mean_cq = compute_mean_cq(df)
+    all_samples = sorted(df["Sample"].astype(str).unique())
+    out: dict[str, list[str]] = {}
+    for ref in ref_genes:
+        present = set(
+            mean_cq.loc[mean_cq["Target"] == ref, "Sample"].astype(str)
+        )
+        out[ref] = [s for s in all_samples if s not in present]
+    return out
+
+
 def compute_delta_ct(
     df: pd.DataFrame,
     ref_genes: list[str],
+    sample_excludes_per_hk: dict[str, set[str] | list[str]] | None = None,
 ) -> dict[str, pd.DataFrame]:
     """ΔCt = mean_Cq(Target) − mean_Cq(HK) for each Sample × Target.
 
@@ -51,6 +81,11 @@ def compute_delta_ct(
         df: DataFrame with columns Well, Target, Sample, Group, Cq and
             optional Excluded.
         ref_genes: housekeeping gene names present in the Target column.
+        sample_excludes_per_hk: ``{hk_gene: {sample, ...}}`` — samples to
+            drop from each HK's ΔCt sheet (e.g. when a sample lacks a valid
+            HK Cq, or the user wants to exclude it for that HK only). The
+            sample still appears for other HKs unless listed there too.
+            Use the special key ``"*"`` to exclude a sample from every HK.
 
     Returns:
         dict keyed by housekeeping gene name → DataFrame with columns
@@ -59,6 +94,9 @@ def compute_delta_ct(
     """
     if not ref_genes:
         raise ValueError("At least one housekeeping gene is required.")
+
+    excl_per_hk = {k: set(v) for k, v in (sample_excludes_per_hk or {}).items()}
+    global_excl = excl_per_hk.pop("*", set())
 
     mean_cq = compute_mean_cq(df)
     if mean_cq.empty:
@@ -72,18 +110,27 @@ def compute_delta_ct(
     results: dict[str, pd.DataFrame] = {}
     for ref in ref_genes:
         ref_col = f"Mean_Cq_{ref}"
+        drop_samples = global_excl | excl_per_hk.get(ref, set())
+
         ref_cq = (
             mean_cq.loc[mean_cq["Target"] == ref, ["Sample", "Group", "Mean_Cq"]]
             .rename(columns={"Mean_Cq": ref_col})
         )
+        if drop_samples:
+            ref_cq = ref_cq[~ref_cq["Sample"].astype(str).isin(drop_samples)]
+
         target_df = mean_cq.loc[mean_cq["Target"] != ref].copy()
+        if drop_samples:
+            target_df = target_df[~target_df["Sample"].astype(str).isin(drop_samples)]
+
         merged = target_df.merge(ref_cq, on=["Sample", "Group"], how="left")
         absent = merged[ref_col].isna()
         if absent.any():
             bad = merged.loc[absent, ["Sample", "Group"]].drop_duplicates()
             raise ValueError(
                 f"Housekeeping gene '{ref}' missing for samples: "
-                f"{bad.to_dict(orient='records')}"
+                f"{bad.to_dict(orient='records')}. "
+                "Add these samples to sample_excludes_per_hk to skip them."
             )
         merged["dCt"] = merged["Mean_Cq"] - merged[ref_col]
         merged["Expr_vs_HK"] = np.power(2.0, -merged["dCt"])
@@ -100,6 +147,7 @@ def compute_delta_delta_ct(
     ref_genes: list[str],
     reference_group: str,
     sample_batches: dict[str, str] | None = None,
+    sample_excludes_per_hk: dict[str, set[str] | list[str]] | None = None,
 ) -> dict[str, pd.DataFrame]:
     """Batch-aware ΔΔCt relative quantification.
 
@@ -116,6 +164,8 @@ def compute_delta_delta_ct(
         sample_batches: mapping {sample_name: batch_label}.  When None or a
             sample is absent from the dict, that sample is assigned to
             "batch_1" (i.e. all samples belong to a single batch by default).
+        sample_excludes_per_hk: forwarded to :func:`compute_delta_ct` — see
+            its docstring for semantics.
 
     Returns:
         dict keyed by housekeeping gene name → DataFrame with columns
@@ -126,7 +176,7 @@ def compute_delta_delta_ct(
     if not ref_genes:
         raise ValueError("At least one housekeeping gene is required.")
 
-    dct_results = compute_delta_ct(df, ref_genes)
+    dct_results = compute_delta_ct(df, ref_genes, sample_excludes_per_hk)
 
     all_samples = df["Sample"].unique()
     if sample_batches is None:

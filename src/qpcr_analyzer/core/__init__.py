@@ -26,24 +26,45 @@ from .columns import (
     ColumnMapping,
     apply_mapping,
     detect_columns,
+    validate_sample_batches,
     validate_sample_groups,
 )
-from .export import results_to_xlsx_bytes
+from .export import results_to_csv_zip_bytes, results_to_xlsx_bytes
 from .io import read_table
 from .outliers import mark_outliers
-from .quant import compute_delta_ct, compute_delta_delta_ct, compute_mean_cq
+from .quant import (
+    compute_delta_ct,
+    compute_delta_delta_ct,
+    compute_mean_cq,
+    samples_missing_hk,
+)
+from .summary import (
+    build_blocks,
+    sort_wells,
+    summarize_dataset,
+    target_order,
+    well_sort_key,
+)
 
 __all__ = [
     "ROLES",
     "ROLE_LABELS",
     "ColumnMapping",
     "apply_mapping",
+    "build_blocks",
     "compute_delta_ct",
     "compute_delta_delta_ct",
     "compute_mean_cq",
     "detect_columns",
     "mark_outliers",
     "read_table",
+    "results_to_csv_zip_bytes",
     "results_to_xlsx_bytes",
+    "samples_missing_hk",
+    "sort_wells",
+    "summarize_dataset",
+    "target_order",
+    "validate_sample_batches",
     "validate_sample_groups",
+    "well_sort_key",
 ]

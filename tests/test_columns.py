@@ -5,6 +5,7 @@ from qpcr_analyzer.core.columns import (
     ColumnMapping,
     apply_mapping,
     detect_columns,
+    validate_sample_batches,
     validate_sample_groups,
 )
 
@@ -151,3 +152,74 @@ def test_validate_sample_groups_multiple_conflicts():
     )
     errs = validate_sample_groups(df)
     assert len(errs) == 2
+
+
+def test_detect_batch_column():
+    df = pd.DataFrame(
+        {
+            "Well": ["A1"],
+            "Target": ["g"],
+            "Sample": ["s"],
+            "Cq": [20.0],
+            "Batch": ["b1"],
+        }
+    )
+    m = detect_columns(df)
+    assert m.assignments["batch"] == "Batch"
+
+
+def test_detect_batch_synonym():
+    df = pd.DataFrame(
+        {
+            "Well": ["A1"],
+            "Target": ["g"],
+            "Sample": ["s"],
+            "Cq": [20.0],
+            "Run": ["r1"],
+        }
+    )
+    m = detect_columns(df)
+    assert m.assignments["batch"] == "Run"
+
+
+def test_apply_mapping_carries_batch_when_present():
+    df = pd.DataFrame(
+        {"W": ["A1"], "T": ["g"], "S": ["s"], "C": [20.0], "B": ["bx"]}
+    )
+    m = ColumnMapping(
+        assignments={
+            "well": "W", "target": "T", "sample": "S", "cq": "C",
+            "group": None, "batch": "B",
+        },
+        confidence={},
+    )
+    out = apply_mapping(df, m)
+    assert "Batch" in out.columns
+    assert out["Batch"].iloc[0] == "bx"
+
+
+def test_validate_sample_batches_ok():
+    df = pd.DataFrame(
+        {
+            "Sample": ["s1", "s1", "s2"],
+            "Batch": ["b1", "b1", "b2"],
+        }
+    )
+    assert validate_sample_batches(df) == []
+
+
+def test_validate_sample_batches_conflict():
+    df = pd.DataFrame(
+        {
+            "Sample": ["s1", "s1", "s2"],
+            "Batch": ["b1", "b2", "b1"],
+        }
+    )
+    errs = validate_sample_batches(df)
+    assert len(errs) == 1
+    assert "s1" in errs[0]
+
+
+def test_validate_sample_batches_no_batch_column_returns_empty():
+    df = pd.DataFrame({"Sample": ["s1"]})
+    assert validate_sample_batches(df) == []
