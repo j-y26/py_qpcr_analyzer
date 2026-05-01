@@ -33,13 +33,30 @@ def target_order(df: pd.DataFrame) -> list[str]:
     return list(pd.unique(df["Target"].astype(str)))
 
 
+def sample_order(df: pd.DataFrame) -> list[str]:
+    """Sample names in the order they first appear in the source DataFrame."""
+    return list(pd.unique(df["Sample"].astype(str)))
+
+
+def group_order(df: pd.DataFrame) -> list[str]:
+    """Group names in the order they first appear in the source DataFrame."""
+    if "Group" not in df.columns:
+        return []
+    return list(pd.unique(df["Group"].astype(str)))
+
+
 def sort_wells(
     df: pd.DataFrame,
     targets: list[str] | None = None,
 ) -> pd.DataFrame:
-    """Sort by Target (file order) → Group → Sample → Well (natural A1 order).
+    """Sort by Target → Group → Sample → Well, all in *file-appearance* order.
 
-    Replicate wells of the same (Sample × Target) end up adjacent.
+    Replicate wells of the same (Sample × Target) end up adjacent. None of
+    Group / Sample is sorted alphanumerically — biological labels often
+    encode meaning (e.g. ``donor_3`` before ``donor_10``) that
+    lexicographic sort would break, so we honour the order they first
+    appear in the upload. Wells inside a block use natural A1, A2, …
+    ordering since well IDs are just plate coordinates.
 
     Args:
         df: Standardised DataFrame with columns Well, Target, Sample, Group.
@@ -49,14 +66,24 @@ def sort_wells(
     if targets is None:
         targets = target_order(df)
     target_rank = {t: i for i, t in enumerate(targets)}
+    group_rank = {g: i for i, g in enumerate(group_order(df))}
+    sample_rank = {s: i for i, s in enumerate(sample_order(df))}
 
     out = df.copy()
     out["__t_rank"] = out["Target"].astype(str).map(target_rank).fillna(len(targets))
+    out["__g_rank"] = (
+        out["Group"].astype(str).map(group_rank).fillna(len(group_rank))
+        if "Group" in out.columns
+        else 0
+    )
+    out["__s_rank"] = (
+        out["Sample"].astype(str).map(sample_rank).fillna(len(sample_rank))
+    )
     out["__well_key"] = out["Well"].astype(str).map(well_sort_key)
     out = out.sort_values(
-        by=["__t_rank", "Group", "Sample", "__well_key"],
+        by=["__t_rank", "__g_rank", "__s_rank", "__well_key"],
         kind="mergesort",
-    ).drop(columns=["__t_rank", "__well_key"])
+    ).drop(columns=["__t_rank", "__g_rank", "__s_rank", "__well_key"])
     return out.reset_index(drop=True)
 
 
@@ -79,6 +106,8 @@ def build_blocks(
     if targets is None:
         targets = target_order(flagged)
     target_rank = {t: i for i, t in enumerate(targets)}
+    group_rank = {g: i for i, g in enumerate(group_order(flagged))}
+    sample_rank = {s: i for i, s in enumerate(sample_order(flagged))}
 
     sorted_df = sort_wells(flagged, targets=targets)
     blocks: list[dict] = []
@@ -116,8 +145,8 @@ def build_blocks(
                 "has_exclusion": (n_excluded > 0) or (n_flagged > 0),
                 "_rank": (
                     target_rank.get(str(target), len(targets)),
-                    str(group),
-                    str(sample),
+                    group_rank.get(str(group), len(group_rank)),
+                    sample_rank.get(str(sample), len(sample_rank)),
                 ),
             }
         )

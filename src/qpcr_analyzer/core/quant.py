@@ -56,7 +56,9 @@ def samples_missing_hk(
         Genes with no missing samples are still present with an empty list.
     """
     mean_cq = compute_mean_cq(df)
-    all_samples = sorted(df["Sample"].astype(str).unique())
+    # File-appearance order, not alphanumeric: biological sample labels
+    # often encode meaning that lexical sort destroys.
+    all_samples = list(pd.unique(df["Sample"].astype(str)))
     out: dict[str, list[str]] = {}
     for ref in ref_genes:
         present = set(

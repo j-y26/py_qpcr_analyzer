@@ -81,14 +81,16 @@ def test_formatted_sheet_includes_sample_columns():
     formatted = _build_formatted_table(df, value_col="dCt")
     # One Sample column per group, plus Target
     assert "Target" in formatted.columns
-    assert "ctrl_Sample" in formatted.columns
-    assert "treat_Sample" in formatted.columns
-    assert "ctrl" in formatted.columns
-    assert "treat" in formatted.columns
+    assert "Sample (ctrl)" in formatted.columns
+    assert "Sample (treat)" in formatted.columns
+    assert "Relative Expression (ctrl)" in formatted.columns
+    assert "Relative Expression (treat)" in formatted.columns
 
     # The data row(s) contain the sample names alongside values
     data_rows = formatted[formatted["Target"] == ""]
-    sample_cells = data_rows["ctrl_Sample"].tolist() + data_rows["treat_Sample"].tolist()
+    sample_cells = (
+        data_rows["Sample (ctrl)"].tolist() + data_rows["Sample (treat)"].tolist()
+    )
     assert "s1" in sample_cells
     assert "s2" in sample_cells
 

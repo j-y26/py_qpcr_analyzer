@@ -40,6 +40,8 @@ from .quant import (
 )
 from .summary import (
     build_blocks,
+    group_order,
+    sample_order,
     sort_wells,
     summarize_dataset,
     target_order,
@@ -56,10 +58,12 @@ __all__ = [
     "compute_delta_delta_ct",
     "compute_mean_cq",
     "detect_columns",
+    "group_order",
     "mark_outliers",
     "read_table",
     "results_to_csv_zip_bytes",
     "results_to_xlsx_bytes",
+    "sample_order",
     "samples_missing_hk",
     "sort_wells",
     "summarize_dataset",

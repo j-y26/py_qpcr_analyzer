@@ -41,6 +41,7 @@ def _safe_filename(prefix: str, name: str) -> str:
 def _build_formatted_table(
     result_df: pd.DataFrame,
     value_col: str,
+    value_label: str = "Relative Expression",
 ) -> pd.DataFrame:
     """Build a wide grouped table with explicit sample names per row.
 
@@ -49,15 +50,8 @@ def _build_formatted_table(
     holding the sample name and one holding the value. Different groups can
     have different sample counts — short groups are padded with blanks.
 
-    Example (Relative_Expr, two targets, two groups)::
-
-        Target  Control_Sample  Control  Treatment_Sample  Treatment
-        GeneX
-                s1              1.05     s3                2.31
-                s2              0.93     s4                2.15
-
-        GeneY
-                s1              0.88     s3                1.72
+    Column labels follow the pattern
+    ``Target | Sample ({group1}) | {value_label} ({group1}) | ...``.
 
     A parity check verifies every emitted value matches the input
     ``result_df`` for the matching (Target, Group, Sample) cell, raising
@@ -66,20 +60,19 @@ def _build_formatted_table(
     targets = list(result_df["Target"].unique())
     groups = list(result_df["Group"].unique())
 
-    sample_col_for = {g: f"{g}_Sample" for g in groups}
+    sample_col_for = {g: f"Sample ({g})" for g in groups}
+    value_col_for = {g: f"{value_label} ({g})" for g in groups}
     columns = ["Target"]
     for g in groups:
-        columns.extend([sample_col_for[g], g])
+        columns.extend([sample_col_for[g], value_col_for[g]])
     blank_row = {c: "" for c in columns}
 
     all_rows: list[dict] = []
     written: list[tuple[str, str, str, float | None]] = []  # for parity check
     for target in targets:
         sub = result_df[result_df["Target"] == target]
-        header_row = {"Target": target}
-        for g in groups:
-            header_row[sample_col_for[g]] = f"{g} sample"
-            header_row[g] = g
+        header_row = {c: "" for c in columns}
+        header_row["Target"] = target
         all_rows.append(header_row)
 
         per_group: dict[str, list[tuple[str, float | None]]] = {g: [] for g in groups}
@@ -96,11 +89,11 @@ def _build_formatted_table(
                 if i < len(per_group[g]):
                     sample, value = per_group[g][i]
                     row[sample_col_for[g]] = sample
-                    row[g] = value
+                    row[value_col_for[g]] = value
                     written.append((str(target), str(g), sample, value))
                 else:
                     row[sample_col_for[g]] = ""
-                    row[g] = None
+                    row[value_col_for[g]] = None
             all_rows.append(row)
 
         all_rows.append(dict(blank_row))
@@ -178,14 +171,24 @@ def _iter_sheets(
 
     for ref, df in dct_results.items():
         yield ("dCt_", ref, df)
-        yield ("formatted_dCt_", ref, _build_formatted_table(df, value_col="dCt"))
+        # Formatted ΔCt sheet displays relative expression vs HK
+        # (2^−ΔCt), not the raw ΔCt values.
+        yield (
+            "formatted_dCt_",
+            ref,
+            _build_formatted_table(
+                df, value_col="Expr_vs_HK", value_label="Relative Expression"
+            ),
+        )
 
     for ref, df in ddct_results.items():
         yield ("ddCt_", ref, df)
         yield (
             "formatted_ddCt_",
             ref,
-            _build_formatted_table(df, value_col="Relative_Expr"),
+            _build_formatted_table(
+                df, value_col="Relative_Expr", value_label="Relative Expression"
+            ),
         )
 
 
