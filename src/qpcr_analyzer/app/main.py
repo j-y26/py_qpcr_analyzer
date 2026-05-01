@@ -24,6 +24,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from nicegui import events, ui
 
+from qpcr_analyzer import __version__
 from qpcr_analyzer.core import (
     ROLE_LABELS,
     ROLES,
@@ -86,12 +87,13 @@ def index() -> None:
         with ui.row().classes("items-center gap-3"):
             ui.icon("biotech", size="28px").classes("text-blue-600")
             ui.label("qPCR Analyzer").classes("text-xl font-semibold")
+            ui.badge(f"v{__version__}", color="blue").classes(
+                "text-white text-xs"
+            )
             ui.label("· ΔCt & batch-aware ΔΔCt quantification").classes(
                 "text-sm text-slate-500"
             )
         ui.space()
-        dark = ui.dark_mode()
-        ui.button(icon="dark_mode", on_click=dark.toggle).props("flat round dense")
 
     with ui.row().classes("w-full no-wrap items-stretch gap-0 p-4"):
         # ── LEFT PANE: workflow stepper ───────────────────────────────────────
