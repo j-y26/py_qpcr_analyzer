@@ -59,6 +59,153 @@ PALETTE = [
     "#06b6d4", "#eab308", "#8b5cf6", "#22c55e",
 ]
 
+# Global stylesheet — small, opinionated polish on top of NiceGUI's defaults.
+# Keep this file the single source of UI styling so design tweaks live in
+# one place rather than being sprinkled across builders.
+_GLOBAL_CSS = """
+<style>
+  :root {
+    --qpcr-bg-from: #f8fafc;
+    --qpcr-bg-via:  #ffffff;
+    --qpcr-bg-to:   #eef2ff;
+    --qpcr-accent:  #2563eb;
+    --qpcr-accent-2:#6366f1;
+  }
+  html, body {
+    font-feature-settings: "cv02","cv03","cv04","cv11";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    background:
+      radial-gradient(1200px 600px at 0% -10%, rgba(99,102,241,0.10), transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, rgba(14,165,233,0.08), transparent 55%),
+      linear-gradient(180deg, var(--qpcr-bg-from) 0%, var(--qpcr-bg-via) 40%, var(--qpcr-bg-to) 100%);
+    background-attachment: fixed;
+  }
+  /* Slimmer, neutral scrollbars */
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-thumb {
+    background: rgba(100,116,139,0.35);
+    border-radius: 8px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-thumb:hover { background: rgba(71,85,105,0.55); background-clip: padding-box; }
+  *::-webkit-scrollbar-track { background: transparent; }
+
+  /* Smooth transitions on interactive surfaces */
+  .q-card, .q-btn, .q-tab, .q-expansion-item__container,
+  .q-field__control, .q-chip, .q-badge {
+    transition: box-shadow 180ms ease, transform 180ms ease,
+                border-color 180ms ease, background-color 180ms ease;
+  }
+
+  /* Subtle lift for cards on hover (skip the two big page panes) */
+  .qpcr-card:hover {
+    box-shadow: 0 10px 24px -12px rgba(15, 23, 42, 0.18),
+                0 2px 4px -2px rgba(15, 23, 42, 0.06) !important;
+    border-color: rgba(99,102,241,0.35) !important;
+  }
+
+  /* Page panes: deeper shadow, soft inner glow on focus-within */
+  .qpcr-pane {
+    box-shadow: 0 1px 2px rgba(15,23,42,0.04),
+                0 12px 28px -16px rgba(15,23,42,0.18);
+  }
+
+  /* Header glass */
+  .qpcr-header {
+    background: rgba(255,255,255,0.78) !important;
+    backdrop-filter: saturate(140%) blur(10px);
+    -webkit-backdrop-filter: saturate(140%) blur(10px);
+  }
+
+  /* Brand mark (gradient tile housing the icon) */
+  .qpcr-brand {
+    background: linear-gradient(135deg, #3b82f6 0%, #6366f1 60%, #8b5cf6 100%);
+    box-shadow: 0 8px 18px -8px rgba(79,70,229,0.55),
+                inset 0 1px 0 rgba(255,255,255,0.4);
+  }
+
+  /* Stepper headers a touch tighter and clearer */
+  .q-stepper--vertical .q-stepper__tab {
+    padding-top: 14px; padding-bottom: 14px;
+  }
+  .q-stepper__title { font-weight: 600; letter-spacing: -0.005em; }
+
+  /* Output tabs — animated underline, cleaner active state */
+  .qpcr-tabs .q-tab { font-weight: 500; }
+  .qpcr-tabs .q-tab--active { color: var(--qpcr-accent) !important; }
+  .qpcr-tabs .q-tab__indicator {
+    background: linear-gradient(90deg, #3b82f6, #6366f1) !important;
+    height: 3px !important;
+    border-radius: 999px;
+  }
+
+  /* Buttons feel a touch more modern */
+  .q-btn { border-radius: 10px !important; }
+
+  /* Section eyebrow — used sparingly for output panel headings */
+  .qpcr-eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    font-size: 11px; color: #475569; font-weight: 600;
+  }
+  .qpcr-eyebrow::before {
+    content: ""; width: 18px; height: 2px; border-radius: 2px;
+    background: linear-gradient(90deg,#3b82f6,#6366f1);
+  }
+
+  /* Stat chip / pill: refined gradient surface */
+  .qpcr-chip {
+    background: linear-gradient(180deg, rgba(255,255,255,0.7), rgba(248,250,252,0.7));
+    backdrop-filter: blur(2px);
+  }
+
+  /* Footer glass treatment */
+  .qpcr-footer {
+    background: rgba(255,255,255,0.7) !important;
+    backdrop-filter: saturate(140%) blur(8px);
+    -webkit-backdrop-filter: saturate(140%) blur(8px);
+  }
+
+  /* Plotly: round the figure container */
+  .js-plotly-plot, .plot-container { border-radius: 10px; }
+
+  /* Banded data preview — alternating background per Sample × Target block */
+  .qpcr-banded-table tbody tr.qpcr-band-off > td {
+    background: #ffffff;
+  }
+  .qpcr-banded-table tbody tr.qpcr-band-on > td {
+    background: #f1f5f9;
+    box-shadow:
+      inset 0 1px 0 rgba(15,23,42,0.04),
+      inset 0 -1px 0 rgba(15,23,42,0.04);
+  }
+  .qpcr-banded-table tbody tr.qpcr-band-on:hover > td,
+  .qpcr-banded-table tbody tr.qpcr-band-off:hover > td {
+    background: #eef2ff;
+  }
+  /* Banded data preview — prominent header row */
+  .qpcr-banded-table thead tr > th {
+    background: linear-gradient(180deg, #eef2ff 0%, #e0e7ff 100%) !important;
+    color: #1e293b !important;
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    border-bottom: 2px solid #c7d2fe !important;
+    padding-top: 12px !important;
+    padding-bottom: 12px !important;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+  .qpcr-banded-table thead tr > th .q-table__sort-icon {
+    color: #4f46e5 !important;
+  }
+</style>
+"""
+
 
 def _build_color_map(items: list[str]) -> dict[str, str]:
     """Stable colour-by-label mapping that wraps the palette if needed."""
@@ -155,27 +302,39 @@ def index() -> None:
     state = _new_state()
     refs: dict[str, Any] = {}
 
-    ui.query("body").classes("bg-slate-50")
+    ui.add_head_html(_GLOBAL_CSS)
+    ui.query("body").classes("min-h-screen text-slate-900")
 
     with ui.header(elevated=False).classes(
-        "bg-white text-slate-900 items-center border-b border-slate-200 px-6"
+        "qpcr-header text-slate-900 items-center "
+        "border-b border-slate-200/70 px-6 py-2"
     ):
         with ui.row().classes("items-center gap-3"):
-            ui.icon("biotech", size="28px").classes("text-blue-600")
-            ui.label("qPCR Analyzer").classes("text-xl font-semibold")
-            ui.badge(f"v{__version__}", color="blue").classes(
-                "text-white text-xs"
-            )
-            ui.label("· ΔCt & batch-aware ΔΔCt quantification").classes(
-                "text-sm text-slate-500"
-            )
+            with ui.element("div").classes(
+                "qpcr-brand flex items-center justify-center "
+                "w-10 h-10 rounded-xl"
+            ):
+                ui.icon("biotech", size="22px").classes("text-white")
+            with ui.column().classes("gap-0 leading-tight"):
+                with ui.row().classes("items-center gap-2"):
+                    ui.label("qPCR Analyzer").classes(
+                        "text-xl font-bold tracking-tight text-slate-900"
+                    )
+                    ui.badge(f"v{__version__}").classes(
+                        "text-white text-[10px] font-semibold tracking-wide "
+                        "px-2 py-0.5 rounded-md "
+                        "bg-gradient-to-r from-blue-600 to-indigo-600"
+                    )
+                ui.label("ΔCt & batch-aware ΔΔCt quantification").classes(
+                    "text-xs text-slate-500"
+                )
         ui.space()
 
-    with ui.row().classes("w-full no-wrap items-stretch gap-0 p-4"):
+    with ui.row().classes("w-full no-wrap items-stretch gap-0 p-6"):
         # ── LEFT PANE: workflow stepper ───────────────────────────────────────
         with ui.column().classes(
-            "w-2/5 min-w-[420px] max-w-[640px] bg-white border border-slate-200 "
-            "rounded-lg shadow-sm p-4 mr-4"
+            "qpcr-pane w-2/5 min-w-[420px] max-w-[640px] bg-white "
+            "border border-slate-200/80 rounded-xl p-5 mr-5"
         ):
             with ui.expansion("How to use this app", icon="help_outline").classes(
                 "w-full"
@@ -219,10 +378,13 @@ def index() -> None:
 
         # ── RIGHT PANE: persistent output tabs ────────────────────────────────
         with ui.column().classes(
-            "flex-grow bg-white border border-slate-200 rounded-lg shadow-sm p-4"
+            "qpcr-pane flex-grow bg-white border border-slate-200/80 "
+            "rounded-xl p-5"
         ):
-            ui.label("Output").classes("text-base font-semibold text-slate-800 mb-1")
-            with ui.tabs().classes("w-full") as out_tabs:
+            with ui.column().classes("gap-0 leading-tight"):
+                with ui.element("span").classes("qpcr-eyebrow"):
+                    ui.label("Live results")
+            with ui.tabs().classes("w-full qpcr-tabs") as out_tabs:
                 tab_summary = ui.tab("Summary", icon="summarize")
                 tab_preview = ui.tab("Data preview", icon="table_view")
                 tab_excluded = ui.tab("Excluded blocks", icon="rule")
@@ -238,68 +400,71 @@ def index() -> None:
                 with ui.tab_panel(tab_summary):
                     refs["summary_panel"] = ui.column().classes("w-full gap-2")
                     with refs["summary_panel"]:
-                        ui.label("Upload a file to see the dataset summary.").classes(
-                            "text-sm text-slate-500"
+                        _empty_state(
+                            "upload_file",
+                            "Upload a file to see the dataset summary.",
                         )
 
                 with ui.tab_panel(tab_preview):
                     refs["preview_panel"] = ui.column().classes("w-full gap-2")
                     with refs["preview_panel"]:
-                        ui.label("Data preview will appear after column mapping.").classes(
-                            "text-sm text-slate-500"
+                        _empty_state(
+                            "table_view",
+                            "Data preview will appear after column mapping.",
                         )
 
                 with ui.tab_panel(tab_excluded):
                     refs["excluded_panel"] = ui.column().classes("w-full gap-2")
                     with refs["excluded_panel"]:
-                        ui.label(
-                            "Outlier review and exclusion blocks will appear here."
-                        ).classes("text-sm text-slate-500")
+                        _empty_state(
+                            "rule",
+                            "Outlier review and exclusion blocks will appear here.",
+                        )
 
                 with ui.tab_panel(tab_hk_setup):
                     refs["hk_setup_panel"] = ui.column().classes(
                         "w-full gap-3"
                     )
                     with refs["hk_setup_panel"]:
-                        ui.label(
+                        _empty_state(
+                            "science",
                             "Housekeeping gene selection and the associated "
                             "sample / well exclusions will appear here once "
-                            "you reach step 5."
-                        ).classes("text-sm text-slate-500")
+                            "you reach step 5.",
+                        )
 
                 with ui.tab_panel(tab_dct):
                     refs["dct_panel"] = ui.column().classes("w-full gap-3")
                     with refs["dct_panel"]:
-                        ui.label("Run ΔCt to populate this tab.").classes(
-                            "text-sm text-slate-500"
-                        )
+                        _empty_state("show_chart", "Run ΔCt to populate this tab.")
 
                 with ui.tab_panel(tab_ddct):
                     refs["ddct_panel"] = ui.column().classes("w-full gap-3")
                     with refs["ddct_panel"]:
-                        ui.label("Run ΔΔCt to populate this tab.").classes(
-                            "text-sm text-slate-500"
-                        )
+                        _empty_state("bar_chart", "Run ΔΔCt to populate this tab.")
 
                 with ui.tab_panel(tab_downloads):
                     refs["downloads_panel"] = ui.column().classes("w-full gap-2")
                     with refs["downloads_panel"]:
-                        ui.label(
+                        _empty_state(
+                            "download",
                             "Downloads (Excel workbook + per-figure PNG) appear "
-                            "after analyses run."
-                        ).classes("text-sm text-slate-500")
+                            "after analyses run.",
+                        )
 
     with ui.footer().classes(
-        "bg-white border-t border-slate-200 text-slate-600 text-xs px-6 py-3 "
-        "items-center justify-center"
+        "qpcr-footer border-t border-slate-200/70 text-slate-600 "
+        "text-xs px-6 py-3 items-center justify-center"
     ):
         with ui.row().classes("items-center gap-2 flex-wrap justify-center"):
-            ui.label(f"qPCR Analyzer v{__version__}").classes("font-medium")
-            ui.label("·").classes("text-slate-400")
+            ui.label(f"qPCR Analyzer v{__version__}").classes(
+                "font-semibold text-slate-700"
+            )
+            ui.label("·").classes("text-slate-300")
             ui.label("Created by Jielin Yang")
-            ui.label("·").classes("text-slate-400")
+            ui.label("·").classes("text-slate-300")
             ui.label("MIT License")
-            ui.label("·").classes("text-slate-400")
+            ui.label("·").classes("text-slate-300")
             with ui.link(
                 target="https://github.com/j-y26/py_qpcr_analyzer",
                 new_tab=True,
@@ -795,7 +960,12 @@ def _render_initial_summary(state: dict, refs: dict) -> None:
     df = state["raw_df"]
     n_rows, n_cols = df.shape
     with panel:
-        ui.label("Initial dataset preview").classes("text-base font-semibold")
+        with ui.column().classes("gap-0 leading-tight"):
+            with ui.element("span").classes("qpcr-eyebrow"):
+                ui.label("Loaded")
+            ui.label("Initial dataset preview").classes(
+                "text-lg font-bold tracking-tight text-slate-900"
+            )
         ui.label(
             f"Loaded {state['filename']} · {n_rows} rows × {n_cols} columns"
         ).classes("text-sm text-slate-700")
@@ -812,9 +982,12 @@ def _render_full_summary(state: dict, refs: dict) -> None:
     df = state.get("standardized")
     show_batches = bool(state.get("has_batches"))
     with panel:
-        ui.label("Dataset summary").classes(
-            "text-lg font-semibold text-slate-800"
-        )
+        with ui.column().classes("gap-0 leading-tight"):
+            with ui.element("span").classes("qpcr-eyebrow"):
+                ui.label("Overview")
+            ui.label("Dataset summary").classes(
+                "text-lg font-bold tracking-tight text-slate-900"
+            )
         with ui.row().classes("w-full gap-6 flex-wrap text-sm text-slate-700"):
             ui.label(f"Analysis: {s['analysis_time']}")
             ui.label(f"File: {s['filename']}")
@@ -838,7 +1011,8 @@ def _render_full_summary(state: dict, refs: dict) -> None:
                 f"Samples: {s['n_samples']}",
                 icon="people_alt",
             ).classes(
-                "w-full rounded-md border border-slate-200 bg-white shadow-sm"
+                "qpcr-card w-full rounded-lg border border-slate-200 "
+                "bg-white shadow-sm"
             ):
                 with ui.column().classes("w-full gap-3 p-1"):
                     for i, (g, samples) in enumerate(samples_by_group.items()):
@@ -881,11 +1055,27 @@ _ACCENTS: list[dict[str, str]] = [
 ]
 
 
+def _empty_state(icon: str, message: str) -> None:
+    """Friendly placeholder shown in output tabs before data is available."""
+    with ui.element("div").classes(
+        "w-full flex flex-col items-center justify-center gap-3 "
+        "py-10 px-6 rounded-xl border border-dashed border-slate-200 "
+        "bg-gradient-to-b from-slate-50/60 to-white text-center"
+    ):
+        with ui.element("div").classes(
+            "flex items-center justify-center w-12 h-12 rounded-full "
+            "bg-slate-100 text-slate-500"
+        ):
+            ui.icon(icon, size="24px")
+        ui.label(message).classes("text-sm text-slate-500 max-w-sm")
+
+
 def _pill(text: str, accent: dict[str, str]) -> None:
     """Render a single soft-tinted chip used in dataset-summary sections."""
     with ui.element("div").classes(
-        f"px-2.5 py-1 rounded-full text-xs {accent['bg']} "
-        f"border {accent['border']} {accent['text']} font-medium"
+        f"qpcr-chip px-2.5 py-1 rounded-full text-xs {accent['bg']} "
+        f"border {accent['border']} {accent['text']} font-medium "
+        "shadow-[0_1px_0_rgba(255,255,255,0.6)_inset,0_1px_2px_rgba(15,23,42,0.04)]"
     ):
         ui.label(str(text))
 
@@ -894,8 +1084,10 @@ def _stat_chip(label: str, value, warn: bool = False) -> None:
     color = "amber" if warn else "blue"
     value_str = "" if value is None else str(value)
     with ui.element("div").classes(
-        f"px-3 py-1 rounded-full bg-{color}-50 border border-{color}-200 "
-        "text-sm flex items-center gap-1"
+        f"qpcr-chip px-3 py-1 rounded-full bg-{color}-50 "
+        f"border border-{color}-200 "
+        "text-sm flex items-center gap-1 "
+        "shadow-[0_1px_0_rgba(255,255,255,0.6)_inset,0_1px_2px_rgba(15,23,42,0.04)]"
     ):
         if value_str:
             ui.label(value_str).classes(f"font-semibold text-{color}-700")
@@ -913,7 +1105,8 @@ def _summary_section_pills(
         f"{title}: {count}",
         icon="list",
     ).classes(
-        "w-full rounded-md border border-slate-200 bg-white shadow-sm"
+        "qpcr-card w-full rounded-lg border border-slate-200 "
+        "bg-white shadow-sm"
     ):
         if not values:
             ui.label("(none)").classes("text-sm text-slate-500")
@@ -949,9 +1142,24 @@ def _render_data_preview(state: dict, refs: dict) -> None:
         c for c in candidate_cols
         if c in sorted_df.columns and (c != "Batch" or show_batches)
     ]
+    # Assign a 0/1 band parity per (Sample × Target) block so rows
+    # belonging to the same replicate set share a background.
+    band_parity: list[int] = []
+    parity = 0
+    prev_key: tuple | None = None
+    for _, r in sorted_df.iterrows():
+        key = (r.get("Target"), r.get("Sample"))
+        if prev_key is not None and key != prev_key:
+            parity ^= 1
+        band_parity.append(parity)
+        prev_key = key
+
     rows = [
-        {c: (None if pd.isna(r[c]) else r[c]) for c in cols}
-        for _, r in sorted_df[cols].iterrows()
+        {
+            **{c: (None if pd.isna(r[c]) else r[c]) for c in cols},
+            "_band": band_parity[i],
+        }
+        for i, (_, r) in enumerate(sorted_df[cols].iterrows())
     ]
     columns = [
         {"name": c, "label": c, "field": c, "align": "left", "sortable": True}
@@ -960,10 +1168,25 @@ def _render_data_preview(state: dict, refs: dict) -> None:
     with panel:
         ui.label(
             "Standardised data — sorted by Target (file order) → Group → "
-            "Sample → Well."
+            "Sample → Well. Alternating shading marks each "
+            "Sample × Target replicate block."
         ).classes("text-sm text-slate-600")
-        ui.table(columns=columns, rows=rows, row_key="Well", pagination=20).classes(
-            "w-full"
+        table = ui.table(
+            columns=columns, rows=rows, row_key="Well", pagination=20,
+        ).classes("w-full qpcr-banded-table")
+        # Replace the default row template so we can class each <tr> based on
+        # the precomputed _band parity. The slot stays compatible with
+        # Quasar's pagination & sorting.
+        table.add_slot(
+            "body",
+            r"""
+            <q-tr :props="props"
+                  :class="props.row._band ? 'qpcr-band-on' : 'qpcr-band-off'">
+              <q-td v-for="col in props.cols" :key="col.name" :props="props">
+                {{ col.value }}
+              </q-td>
+            </q-tr>
+            """,
         )
 
 
@@ -1064,7 +1287,10 @@ def _render_groups(state: dict, refs: dict) -> None:
             "dropdown for subsequent rows."
         ).classes("text-xs text-slate-500")
 
-        with ui.card().classes("w-full border border-slate-200 shadow-none p-3"):
+        with ui.card().classes(
+            "qpcr-card w-full rounded-xl shadow-sm "
+            "border border-slate-200 bg-white p-3"
+        ):
             grid_classes = (
                 "grid grid-cols-3 gap-x-3 gap-y-2 items-center w-full"
             )
@@ -1497,7 +1723,9 @@ def _render_excluded_samples_panel(state: dict, refs: dict) -> None:
         ):
             # ── (a) Housekeeping gene(s) ─────────────────────────────────
             with ui.card().classes(
-                "flex-1 min-w-[220px] border border-blue-200 bg-blue-50 shadow-none"
+                "qpcr-card flex-1 min-w-[220px] rounded-xl shadow-sm "
+                "border border-blue-200 "
+                "bg-gradient-to-br from-blue-50 to-indigo-50"
             ):
                 with ui.row().classes("items-center gap-2"):
                     ui.icon("science").classes("text-blue-700")
@@ -1519,7 +1747,8 @@ def _render_excluded_samples_panel(state: dict, refs: dict) -> None:
 
             # ── (b) Sample exclusion summary ────────────────────────────
             with ui.card().classes(
-                "flex-1 min-w-[260px] border border-slate-200 shadow-none"
+                "qpcr-card flex-1 min-w-[260px] rounded-xl shadow-sm "
+                "border border-slate-200 bg-white"
             ):
                 with ui.row().classes("items-center gap-2"):
                     ui.icon("person_off").classes("text-rose-700")
@@ -1591,7 +1820,8 @@ def _render_excluded_samples_panel(state: dict, refs: dict) -> None:
 
             # ── (c) Well exclusion summary ──────────────────────────────
             with ui.card().classes(
-                "flex-1 min-w-[260px] border border-slate-200 shadow-none"
+                "qpcr-card flex-1 min-w-[260px] rounded-xl shadow-sm "
+                "border border-slate-200 bg-white"
             ):
                 with ui.row().classes("items-center gap-2"):
                     ui.icon("rule").classes("text-amber-700")
@@ -1763,10 +1993,14 @@ def _render_dct_results(state: dict, refs: dict) -> None:
         ).classes("text-sm text-slate-600")
 
         for ref, res_df in results.items():
-            with ui.card().classes("w-full border border-slate-200 shadow-none"):
+            with ui.card().classes(
+                "qpcr-card w-full border border-slate-200 rounded-xl "
+                "shadow-sm bg-white"
+            ):
                 with ui.row().classes("items-center gap-3"):
+                    ui.icon("show_chart").classes("text-blue-600")
                     ui.label(f"Housekeeping: {ref}").classes(
-                        "text-base font-semibold"
+                        "text-base font-semibold tracking-tight text-slate-900"
                     )
                     ui.label(
                         f"{res_df['Target'].nunique()} target(s) · "
@@ -1798,10 +2032,14 @@ def _render_ddct_results(state: dict, refs: dict) -> None:
         ).classes("text-sm text-slate-600")
 
         for ref, res_df in results.items():
-            with ui.card().classes("w-full border border-slate-200 shadow-none"):
+            with ui.card().classes(
+                "qpcr-card w-full border border-slate-200 rounded-xl "
+                "shadow-sm bg-white"
+            ):
                 with ui.row().classes("items-center gap-3"):
+                    ui.icon("bar_chart").classes("text-indigo-600")
                     ui.label(f"Housekeeping: {ref}").classes(
-                        "text-base font-semibold"
+                        "text-base font-semibold tracking-tight text-slate-900"
                     )
                     ui.label(
                         f"{res_df['Target'].nunique()} target(s) · "
