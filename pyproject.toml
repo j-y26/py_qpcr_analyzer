@@ -33,6 +33,7 @@ dependencies = [
 
 [project.optional-dependencies]
 xls = ["xlrd>=1.2,<2.0"]
+desktop = ["pywebview>=5.0"]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",

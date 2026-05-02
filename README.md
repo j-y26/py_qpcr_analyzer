@@ -14,11 +14,12 @@ Supports both **ΔCt** (housekeeping-gene normalisation) and **batch-aware ΔΔC
 ## Table of contents
 
 1. [Quick start](#quick-start)
-2. [Installation](#installation)
+2. [Download (no Python needed)](#download-no-python-needed)
+3. [Installation](#installation)
    - [Windows](#windows)
    - [macOS](#macos)
    - [Linux](#linux)
-3. [Running the application](#running-the-application)
+4. [Running the application](#running-the-application)
    - [Test environment](#test-environment-developmenttrial)
    - [Production environment](#production-environment-lab-server)
 4. [Usage walkthrough](#usage-walkthrough)
@@ -40,6 +41,40 @@ qpcr-analyzer
 ```
 
 then open <http://127.0.0.1:8090> in your browser.
+
+---
+
+## Download (no Python needed)
+
+If you don't want to install Python, grab a standalone build from the
+[**Releases page**](https://github.com/j-y26/py_qpcr_analyzer/releases/latest).
+These are self-contained — no Python, no `pip`, no terminal.
+
+| Platform | File to download |
+|----------|------------------|
+| Windows 10/11 (64-bit) | `qpcr-analyzer-X.Y.Z-windows-x64-setup.exe` (installer) <br>or `…-windows-x64-portable.zip` (no install, just unzip and run) |
+| macOS — Apple Silicon (M1/M2/M3/M4) | `qpcr-analyzer-X.Y.Z-macos-arm64.dmg` |
+| macOS — Intel | `qpcr-analyzer-X.Y.Z-macos-intel.dmg` |
+
+The app opens in its own desktop window — you don't need a browser.
+
+### First-run notes
+
+Because these builds are **not code-signed** (signing requires paid
+developer certificates), your OS will warn the first time you launch:
+
+- **Windows — SmartScreen warning.** Click *More info* → *Run anyway*.
+- **macOS — "cannot be opened, unidentified developer."**
+  Right-click the app in Applications → *Open* → *Open* in the dialog. You
+  only need to do this once. If macOS still refuses, run this in Terminal:
+
+  ```bash
+  xattr -cr "/Applications/qPCR Analyzer.app"
+  ```
+
+These warnings don't mean the app is unsafe — they just mean nobody has
+paid Apple/Microsoft to vouch for it. The source for every build is in
+this repository, and the build runs publicly in GitHub Actions.
 
 ---
 
