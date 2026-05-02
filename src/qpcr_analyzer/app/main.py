@@ -300,11 +300,28 @@ def index() -> None:
             ui.label("·").classes("text-slate-400")
             ui.label("MIT License")
             ui.label("·").classes("text-slate-400")
-            ui.link(
-                "GitHub",
-                "https://github.com/j-y26/py_qpcr_analyzer",
+            with ui.link(
+                target="https://github.com/j-y26/py_qpcr_analyzer",
                 new_tab=True,
-            ).classes("text-blue-600 hover:underline")
+            ).classes(
+                "flex items-center justify-center w-7 h-7 rounded-full "
+                "text-slate-500 hover:text-white hover:bg-slate-800 "
+                "transition-colors no-underline"
+            ).tooltip("View source on GitHub"):
+                ui.html(
+                    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" '
+                    'viewBox="0 0 24 24" fill="currentColor" aria-label="GitHub">'
+                    '<path d="M12 .5C5.73.5.67 5.56.67 11.83c0 5.02 3.25 9.27 7.76 '
+                    '10.77.57.1.78-.25.78-.55 0-.27-.01-.99-.02-1.94-3.16.69-3.83-'
+                    '1.52-3.83-1.52-.52-1.32-1.27-1.67-1.27-1.67-1.04-.71.08-.7.08-.7 '
+                    '1.15.08 1.76 1.18 1.76 1.18 1.02 1.75 2.69 1.25 3.35.96.1-.74.4-'
+                    '1.25.72-1.54-2.52-.29-5.18-1.26-5.18-5.62 0-1.24.45-2.26 1.18-'
+                    '3.06-.12-.29-.51-1.45.11-3.02 0 0 .96-.31 3.15 1.17a10.9 10.9 0 0 '
+                    '1 5.74 0c2.18-1.48 3.14-1.17 3.14-1.17.63 1.57.23 2.73.11 3.02.74.'
+                    '8 1.18 1.82 1.18 3.06 0 4.37-2.67 5.32-5.21 5.61.41.36.78 1.06.78 '
+                    '2.13 0 1.54-.01 2.78-.01 3.16 0 .31.21.66.79.55 4.51-1.5 7.75-5.75 '
+                    '7.75-10.77C23.33 5.56 18.27.5 12 .5z"/></svg>'
+                )
 
     # Initial gating: nothing has been done yet, so disable everything.
     _refresh_step_gates(state, refs)
