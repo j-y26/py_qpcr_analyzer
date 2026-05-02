@@ -80,6 +80,7 @@ _GLOBAL_CSS = """
       radial-gradient(900px 500px at 100% 0%, rgba(14,165,233,0.08), transparent 55%),
       linear-gradient(180deg, var(--qpcr-bg-from) 0%, var(--qpcr-bg-via) 40%, var(--qpcr-bg-to) 100%);
     background-attachment: fixed;
+    transition: background-color 200ms ease, color 200ms ease;
   }
   /* Slimmer, neutral scrollbars */
   *::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -108,6 +109,7 @@ _GLOBAL_CSS = """
 
   /* Page panes: deeper shadow, soft inner glow on focus-within */
   .qpcr-pane {
+    background-color: #ffffff;
     box-shadow: 0 1px 2px rgba(15,23,42,0.04),
                 0 12px 28px -16px rgba(15,23,42,0.18);
   }
@@ -203,6 +205,279 @@ _GLOBAL_CSS = """
   .qpcr-banded-table thead tr > th .q-table__sort-icon {
     color: #4f46e5 !important;
   }
+
+  /* ─────────────────────────────────────────────────────────────────
+     DARK MODE
+     Every visible element listed below has an explicit dark variant.
+     We piggy-back on Quasar's `body.body--dark` class (toggled via
+     `ui.dark_mode()`); Tailwind utility classes used in the markup are
+     overridden one-by-one because NiceGUI does not ship Tailwind dark:
+     variants. Custom `qpcr-*` classes get parallel rules.
+     ────────────────────────────────────────────────────────────── */
+
+  body.body--dark {
+    --qpcr-bg-from: #0b1220;
+    --qpcr-bg-via:  #0f172a;
+    --qpcr-bg-to:   #111827;
+    color: #e2e8f0;
+    background:
+      radial-gradient(1200px 600px at 0% -10%, rgba(99,102,241,0.18), transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, rgba(14,165,233,0.12), transparent 55%),
+      linear-gradient(180deg, var(--qpcr-bg-from) 0%, var(--qpcr-bg-via) 40%, var(--qpcr-bg-to) 100%) !important;
+    background-attachment: fixed;
+  }
+
+  /* Tailwind text-slate-* overrides */
+  body.body--dark .text-slate-900 { color: #f1f5f9 !important; }
+  body.body--dark .text-slate-800 { color: #e2e8f0 !important; }
+  body.body--dark .text-slate-700 { color: #cbd5e1 !important; }
+  body.body--dark .text-slate-600 { color: #b6c2d2 !important; }
+  body.body--dark .text-slate-500 { color: #94a3b8 !important; }
+  body.body--dark .text-slate-400 { color: #94a3b8 !important; }
+  body.body--dark .text-slate-300 { color: #475569 !important; }
+
+  /* Tailwind background overrides — body.body--dark[…] doubles specificity
+     so we win against Tailwind's plain .bg-white in any load order. */
+  body.body--dark .bg-white,
+  body[class*="body--dark"] .bg-white { background-color: #1e293b !important; background: #1e293b !important; }
+  body.body--dark .bg-slate-50 { background-color: #0f172a !important; }
+  body.body--dark .bg-slate-100 { background-color: #1e293b !important; }
+  body.body--dark .bg-slate-200 { background-color: #334155 !important; }
+
+  /* The two top-level page panes hold q-stepper / q-tab-panels which
+     paint their own white surfaces on top. Force them transparent so
+     the qpcr-pane background actually shows. */
+  body.body--dark .qpcr-pane .q-stepper,
+  body.body--dark .qpcr-pane .q-tab-panels,
+  body.body--dark .qpcr-pane .q-tab-panel,
+  body.body--dark .qpcr-pane .q-panel {
+    background: transparent !important;
+    background-color: transparent !important;
+  }
+  body.body--dark .qpcr-pane {
+    background-color: #1e293b !important;
+    background: #1e293b !important;
+  }
+
+  /* Tailwind border overrides */
+  body.body--dark .border-slate-100,
+  body.body--dark .border-slate-200,
+  body.body--dark [class*="border-slate-200"] { border-color: #334155 !important; }
+  body.body--dark .border-slate-300 { border-color: #475569 !important; }
+
+  /* Accent palette overrides — preserve hue, flip lightness for dark surfaces. */
+  body.body--dark .text-blue-700 { color: #93c5fd !important; }
+  body.body--dark .text-blue-900 { color: #bfdbfe !important; }
+  body.body--dark .text-blue-600 { color: #93c5fd !important; }
+  body.body--dark .bg-blue-50 { background-color: rgba(59,130,246,0.14) !important; }
+  body.body--dark .border-blue-200 { border-color: rgba(96,165,250,0.45) !important; }
+
+  body.body--dark .text-emerald-700 { color: #6ee7b7 !important; }
+  body.body--dark .bg-emerald-50 { background-color: rgba(16,185,129,0.14) !important; }
+  body.body--dark .border-emerald-200 { border-color: rgba(52,211,153,0.45) !important; }
+
+  body.body--dark .text-violet-700 { color: #c4b5fd !important; }
+  body.body--dark .bg-violet-50 { background-color: rgba(139,92,246,0.14) !important; }
+  body.body--dark .border-violet-200 { border-color: rgba(167,139,250,0.45) !important; }
+
+  body.body--dark .text-amber-700 { color: #fcd34d !important; }
+  body.body--dark .text-amber-800 { color: #fde68a !important; }
+  body.body--dark .bg-amber-50 { background-color: rgba(245,158,11,0.14) !important; }
+  body.body--dark .border-amber-200 { border-color: rgba(251,191,36,0.45) !important; }
+  body.body--dark .border-amber-300 { border-color: rgba(251,191,36,0.55) !important; }
+
+  body.body--dark .text-rose-700 { color: #fda4af !important; }
+  body.body--dark .text-rose-800 { color: #fecaca !important; }
+  body.body--dark .bg-rose-50 { background-color: rgba(244,63,94,0.14) !important; }
+  body.body--dark .border-rose-200 { border-color: rgba(251,113,133,0.45) !important; }
+
+  body.body--dark .text-cyan-700 { color: #67e8f9 !important; }
+  body.body--dark .bg-cyan-50 { background-color: rgba(6,182,212,0.14) !important; }
+  body.body--dark .border-cyan-200 { border-color: rgba(34,211,238,0.45) !important; }
+
+  body.body--dark .text-indigo-600 { color: #a5b4fc !important; }
+
+  /* qpcr-* surface containers */
+  body.body--dark .qpcr-pane,
+  body.body--dark .qpcr-pane.bg-white {
+    background-color: #1e293b !important;
+    background: #1e293b !important;
+    border-color: #334155 !important;
+    color: #e2e8f0;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.30),
+                0 12px 28px -16px rgba(0,0,0,0.55);
+  }
+
+  /* Quasar tab panels (right-pane output area) default to white. */
+  body.body--dark .q-tab-panels,
+  body.body--dark .q-tab-panel,
+  body.body--dark .q-panel {
+    background: transparent !important;
+    color: #e2e8f0;
+  }
+  body.body--dark .qpcr-header {
+    background: rgba(15,23,42,0.78) !important;
+    color: #e2e8f0 !important;
+    border-color: rgba(51,65,85,0.7) !important;
+  }
+  body.body--dark .qpcr-footer {
+    background: rgba(15,23,42,0.70) !important;
+    color: #94a3b8 !important;
+    border-color: rgba(51,65,85,0.7) !important;
+  }
+  body.body--dark .qpcr-eyebrow { color: #94a3b8 !important; }
+  body.body--dark .qpcr-eyebrow::before {
+    background: linear-gradient(90deg,#60a5fa,#818cf8);
+  }
+  body.body--dark .qpcr-card:hover {
+    box-shadow: 0 10px 24px -12px rgba(0,0,0,0.55),
+                0 2px 4px -2px rgba(0,0,0,0.35) !important;
+    border-color: rgba(129,140,248,0.55) !important;
+  }
+  body.body--dark .qpcr-chip {
+    background: linear-gradient(180deg, rgba(30,41,59,0.85), rgba(15,23,42,0.85)) !important;
+  }
+
+  /* Empty-state placeholder (used in every still-empty output tab) */
+  body.body--dark .qpcr-empty-state {
+    background: linear-gradient(180deg, rgba(15,23,42,0.55), rgba(30,41,59,0.85)) !important;
+    border-color: #334155 !important;
+  }
+  body.body--dark .qpcr-empty-state .bg-slate-100 {
+    background-color: rgba(51,65,85,0.6) !important;
+  }
+
+  /* Housekeeping accent tile (gradient on the right-pane summary card) */
+  body.body--dark .qpcr-hk-tile {
+    background: linear-gradient(135deg,
+      rgba(59,130,246,0.20),
+      rgba(99,102,241,0.20)) !important;
+    border-color: rgba(96,165,250,0.45) !important;
+  }
+
+  /* Banded data preview — dark variant */
+  body.body--dark .qpcr-banded-table tbody tr.qpcr-band-off > td {
+    background: #1e293b !important;
+    color: #e2e8f0 !important;
+  }
+  body.body--dark .qpcr-banded-table tbody tr.qpcr-band-on > td {
+    background: #111827 !important;
+    color: #e2e8f0 !important;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.04),
+      inset 0 -1px 0 rgba(255,255,255,0.04);
+  }
+  body.body--dark .qpcr-banded-table tbody tr.qpcr-band-on:hover > td,
+  body.body--dark .qpcr-banded-table tbody tr.qpcr-band-off:hover > td {
+    background: rgba(99,102,241,0.18) !important;
+  }
+  body.body--dark .qpcr-banded-table thead tr > th {
+    background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%) !important;
+    color: #cbd5e1 !important;
+    border-bottom: 2px solid #334155 !important;
+  }
+  body.body--dark .qpcr-banded-table thead tr > th .q-table__sort-icon {
+    color: #818cf8 !important;
+  }
+
+  /* Plotly figure container — let the card surface show through */
+  body.body--dark .js-plotly-plot,
+  body.body--dark .plot-container {
+    background: transparent;
+  }
+
+  /* ── Quasar dark refinements ────────────────────────────────────── */
+  body.body--dark .q-card {
+    background: #1e293b;
+    color: #e2e8f0;
+    border-color: #334155;
+  }
+  body.body--dark .q-table {
+    background: rgba(30,41,59,0.6) !important;
+    color: #e2e8f0;
+  }
+  body.body--dark .q-table tbody td { color: #cbd5e1; border-color: #334155; }
+  body.body--dark .q-table thead th {
+    color: #e2e8f0;
+    background: rgba(15,23,42,0.7);
+    border-color: #334155;
+  }
+  body.body--dark .q-table tbody tr:hover > td { background: rgba(99,102,241,0.14); }
+  body.body--dark .q-table__bottom { color: #94a3b8; border-color: #334155; }
+
+  body.body--dark .q-expansion-item,
+  body.body--dark .q-expansion-item__container { color: #e2e8f0; }
+  body.body--dark .q-expansion-item__container > .q-item { color: #e2e8f0; }
+  body.body--dark .q-separator { background: #334155 !important; }
+
+  body.body--dark .q-stepper { background: transparent !important; color: #e2e8f0; }
+  body.body--dark .q-stepper__title { color: #e2e8f0 !important; }
+  body.body--dark .q-stepper__caption { color: #94a3b8 !important; }
+  body.body--dark .q-stepper--vertical .q-stepper__step-inner { color: #cbd5e1; }
+  body.body--dark .q-stepper__line:before,
+  body.body--dark .q-stepper__line:after { background: #334155 !important; }
+
+  body.body--dark .q-uploader {
+    background: rgba(30,41,59,0.6) !important;
+    color: #e2e8f0;
+    border-color: #334155 !important;
+  }
+  body.body--dark .q-uploader__header {
+    background: rgba(15,23,42,0.85) !important;
+    color: #e2e8f0;
+  }
+  body.body--dark .q-uploader__list { color: #cbd5e1; }
+  body.body--dark .q-uploader__subtitle { color: #94a3b8; }
+
+  /* Form inputs / selects */
+  body.body--dark .q-field__control,
+  body.body--dark .q-field__native,
+  body.body--dark .q-field__input { color: #e2e8f0; }
+  body.body--dark .q-field--outlined .q-field__control:before {
+    border-color: #475569;
+  }
+  body.body--dark .q-field--outlined .q-field__control:hover:before {
+    border-color: #64748b;
+  }
+  body.body--dark .q-field__label { color: #94a3b8; }
+  body.body--dark .q-checkbox__label,
+  body.body--dark .q-radio__label,
+  body.body--dark .q-toggle__label { color: #e2e8f0; }
+  body.body--dark .q-menu,
+  body.body--dark .q-menu .q-item { background: #1e293b; color: #e2e8f0; }
+  body.body--dark .q-menu .q-item:hover { background: rgba(99,102,241,0.18); }
+  body.body--dark .q-chip {
+    background: rgba(51,65,85,0.85);
+    color: #e2e8f0;
+  }
+
+  /* Tabs */
+  body.body--dark .qpcr-tabs .q-tab { color: #cbd5e1; }
+  body.body--dark .qpcr-tabs .q-tab--active { color: #93c5fd !important; }
+
+  /* Dialogs */
+  body.body--dark .q-dialog__inner > .q-card { background: #1e293b; color: #e2e8f0; }
+
+  /* Scrollbars */
+  body.body--dark *::-webkit-scrollbar-thumb {
+    background: rgba(148,163,184,0.35);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  body.body--dark *::-webkit-scrollbar-thumb:hover {
+    background: rgba(148,163,184,0.55);
+    background-clip: padding-box;
+  }
+
+  /* Footer GitHub link hover state */
+  body.body--dark .qpcr-footer a:hover { background: rgba(226,232,240,0.10) !important; }
+
+  /* Markdown links inside how-to expansion */
+  body.body--dark .nicegui-markdown a { color: #93c5fd; }
+  body.body--dark .nicegui-markdown code {
+    background: rgba(99,102,241,0.18);
+    color: #e2e8f0;
+  }
 </style>
 """
 
@@ -210,6 +485,20 @@ _GLOBAL_CSS = """
 def _build_color_map(items: list[str]) -> dict[str, str]:
     """Stable colour-by-label mapping that wraps the palette if needed."""
     return {str(it): PALETTE[i % len(PALETTE)] for i, it in enumerate(items)}
+
+
+def _plotly_layout(dark: bool) -> dict:
+    """Layout fragment that swaps template + transparent paper/plot bg.
+
+    Transparent backgrounds let the surrounding card surface (white in
+    light mode, slate-800 in dark mode) show through, so the figure
+    blends with the page in either theme.
+    """
+    return {
+        "template": "plotly_dark" if dark else "plotly_white",
+        "plot_bgcolor": "rgba(0,0,0,0)",
+        "paper_bgcolor": "rgba(0,0,0,0)",
+    }
 
 
 def _filename_stem(state: dict) -> str:
@@ -305,6 +594,11 @@ def index() -> None:
     ui.add_head_html(_GLOBAL_CSS)
     ui.query("body").classes("min-h-screen text-slate-900")
 
+    # Dark mode controller — Quasar's body--dark class drives every variant
+    # rule defined in _GLOBAL_CSS. Default off (light mode).
+    dark = ui.dark_mode(value=False)
+    state["dark_mode"] = False
+
     with ui.header(elevated=False).classes(
         "qpcr-header text-slate-900 items-center "
         "border-b border-slate-200/70 px-6 py-2"
@@ -330,10 +624,36 @@ def index() -> None:
                 )
         ui.space()
 
+        def _toggle_dark() -> None:
+            state["dark_mode"] = not bool(state.get("dark_mode"))
+            if state["dark_mode"]:
+                dark.enable()
+                refs["dark_btn"].props("icon=light_mode")
+                refs["dark_btn"].tooltip("Switch to light mode")
+            else:
+                dark.disable()
+                refs["dark_btn"].props("icon=dark_mode")
+                refs["dark_btn"].tooltip("Switch to dark mode")
+            # Plotly templates are baked into the figure when built — re-render
+            # any results panels that already have plots so they pick up the
+            # new template without forcing the user to re-run the analysis.
+            if state.get("dct_results"):
+                _render_dct_results(state, refs)
+            if state.get("ddct_results"):
+                _render_ddct_results(state, refs)
+            if state.get("dct_done"):
+                _render_downloads(state, refs)
+
+        refs["dark_btn"] = (
+            ui.button(on_click=_toggle_dark)
+            .props("icon=dark_mode flat round dense color=primary")
+            .tooltip("Switch to dark mode")
+        )
+
     with ui.row().classes("w-full no-wrap items-stretch gap-0 p-6"):
         # ── LEFT PANE: workflow stepper ───────────────────────────────────────
         with ui.column().classes(
-            "qpcr-pane w-2/5 min-w-[420px] max-w-[640px] bg-white "
+            "qpcr-pane w-2/5 min-w-[420px] max-w-[640px] "
             "border border-slate-200/80 rounded-xl p-5 mr-5"
         ):
             with ui.expansion("How to use this app", icon="help_outline").classes(
@@ -378,7 +698,7 @@ def index() -> None:
 
         # ── RIGHT PANE: persistent output tabs ────────────────────────────────
         with ui.column().classes(
-            "qpcr-pane flex-grow bg-white border border-slate-200/80 "
+            "qpcr-pane flex-grow border border-slate-200/80 "
             "rounded-xl p-5"
         ):
             with ui.column().classes("gap-0 leading-tight"):
@@ -1058,7 +1378,7 @@ _ACCENTS: list[dict[str, str]] = [
 def _empty_state(icon: str, message: str) -> None:
     """Friendly placeholder shown in output tabs before data is available."""
     with ui.element("div").classes(
-        "w-full flex flex-col items-center justify-center gap-3 "
+        "qpcr-empty-state w-full flex flex-col items-center justify-center gap-3 "
         "py-10 px-6 rounded-xl border border-dashed border-slate-200 "
         "bg-gradient-to-b from-slate-50/60 to-white text-center"
     ):
@@ -1723,7 +2043,7 @@ def _render_excluded_samples_panel(state: dict, refs: dict) -> None:
         ):
             # ── (a) Housekeeping gene(s) ─────────────────────────────────
             with ui.card().classes(
-                "qpcr-card flex-1 min-w-[220px] rounded-xl shadow-sm "
+                "qpcr-card qpcr-hk-tile flex-1 min-w-[220px] rounded-xl shadow-sm "
                 "border border-blue-200 "
                 "bg-gradient-to-br from-blue-50 to-indigo-50"
             ):
@@ -1982,6 +2302,7 @@ def _render_dct_results(state: dict, refs: dict) -> None:
     panel.clear()
     results = state["dct_results"] or {}
     color_map = _color_map_for_results(state["standardized"], results)
+    dark = bool(state.get("dark_mode"))
     with panel:
         ui.markdown(
             "**Relative expression vs housekeeping** = 2^(−ΔCt). Bars show "
@@ -2013,6 +2334,7 @@ def _render_dct_results(state: dict, refs: dict) -> None:
                     y_label="Relative expression (2^−ΔCt)",
                     ref=ref,
                     color_map=color_map,
+                    dark=dark,
                 )
 
 
@@ -2022,6 +2344,7 @@ def _render_ddct_results(state: dict, refs: dict) -> None:
     results = state["ddct_results"] or {}
     ref_group = state["reference_group"]
     color_map = _color_map_for_results(state["standardized"], results)
+    dark = bool(state.get("dark_mode"))
     with panel:
         ui.markdown(
             f"**ΔΔCt** relative expression: 2^(−ΔΔCt), normalised so that "
@@ -2052,6 +2375,7 @@ def _render_ddct_results(state: dict, refs: dict) -> None:
                     y_label="Relative expression (2^−ΔΔCt)",
                     ref=ref,
                     color_map=color_map,
+                    dark=dark,
                 )
 
 
@@ -2091,6 +2415,7 @@ def _render_figures_for_results(
     y_label: str,
     ref: str,
     color_map: dict[str, str],
+    dark: bool = False,
 ) -> None:
     targets = list(pd.unique(res_df["Target"]))
     groups = list(pd.unique(res_df["Group"]))
@@ -2100,7 +2425,8 @@ def _render_figures_for_results(
         for target in targets:
             sub = res_df[res_df["Target"] == target]
             fig = _plot_figure(
-                sub, target, ref, use_group, value_col, y_label, color_map
+                sub, target, ref, use_group, value_col, y_label, color_map,
+                dark=dark,
             )
             ui.plotly(fig).classes("w-full h-80")
 
@@ -2111,6 +2437,7 @@ def _build_combined_figure_for_hk(
     value_col: str,
     y_label: str,
     color_map: dict[str, str],
+    dark: bool = False,
 ) -> tuple[go.Figure, int]:
     """Combined subplot figure of every target for one housekeeping gene.
 
@@ -2137,14 +2464,14 @@ def _build_combined_figure_for_hk(
     for i, target in enumerate(targets):
         r, c = i // cols + 1, i % cols + 1
         sub = res_df[res_df["Target"] == target]
-        _add_bar_traces(fig, sub, use_group, value_col, color_map, row=r, col=c)
+        _add_bar_traces(
+            fig, sub, use_group, value_col, color_map, row=r, col=c, dark=dark,
+        )
         fig.update_yaxes(title_text=y_label, row=r, col=c)
 
     height = max(320, 320 * rows)
     fig.update_layout(
-        template="plotly_white",
         showlegend=False,
-        plot_bgcolor="white",
         height=height,
         margin=dict(l=50, r=20, t=60, b=40),
         modebar=dict(remove=["lasso2d", "select2d"]),
@@ -2153,6 +2480,7 @@ def _build_combined_figure_for_hk(
             x=0.5,
             xanchor="center",
         ),
+        **_plotly_layout(dark),
     )
     return fig, height
 
@@ -2160,6 +2488,7 @@ def _build_combined_figure_for_hk(
 def _render_downloads(state: dict, refs: dict) -> None:
     panel = refs["downloads_panel"]
     panel.clear()
+    dark = bool(state.get("dark_mode"))
 
     def _build_std() -> pd.DataFrame:
         std = state["standardized"].copy()
@@ -2258,6 +2587,7 @@ def _render_downloads(state: dict, refs: dict) -> None:
                         "Expr_vs_HK",
                         "Relative expression (2^−ΔCt)",
                         color_map,
+                        dark=dark,
                     )
                     ui.label(
                         "Click the camera icon on the figure toolbar to "
@@ -2285,6 +2615,7 @@ def _render_downloads(state: dict, refs: dict) -> None:
                         "Relative_Expr",
                         "Relative expression (2^−ΔΔCt)",
                         color_map,
+                        dark=dark,
                     )
                     ui.label(
                         "Click the camera icon on the figure toolbar to "
@@ -2305,13 +2636,15 @@ def _add_bar_traces(
     *,
     row: int | None = None,
     col: int | None = None,
+    dark: bool = False,
 ) -> None:
     """Add the (mean ± std bar) and optional sample-dot traces to ``fig``.
 
     Bars are coloured by their x-axis label using ``color_map``. The same
     map is used across every plot so a given group/sample always gets the
     same colour. Falls back to :data:`PRIMARY` for any label that was not
-    pre-registered.
+    pre-registered. The ``dark`` flag flips error-bar and per-sample dot
+    colours to a higher-contrast pair against the dark figure surface.
     """
     x_col = "Group" if use_group else "Sample"
     summary = (
@@ -2322,13 +2655,16 @@ def _add_bar_traces(
     )
     bar_colors = [color_map.get(str(x), PRIMARY) for x in summary[x_col]]
     add_kw = {"row": row, "col": col} if row is not None else {}
+    error_color = "#cbd5e1" if dark else "#334155"
+    bar_line_color = "#a5b4fc" if dark else "#1e3a8a"
+    dot_color = "#f1f5f9" if dark else "#0f172a"
     fig.add_bar(
         x=summary[x_col],
         y=summary["mean"],
         error_y=dict(
-            type="data", array=summary["std"], visible=True, color="#334155"
+            type="data", array=summary["std"], visible=True, color=error_color
         ),
-        marker=dict(color=bar_colors, line=dict(color="#1e3a8a", width=0)),
+        marker=dict(color=bar_colors, line=dict(color=bar_line_color, width=0)),
         name="mean",
         hovertemplate="%{x}<br>mean = %{y:.3f}<extra></extra>",
         **add_kw,
@@ -2338,7 +2674,7 @@ def _add_bar_traces(
             x=df[x_col],
             y=df[value_col],
             mode="markers",
-            marker=dict(color="#0f172a", size=6, opacity=0.75),
+            marker=dict(color=dot_color, size=6, opacity=0.85),
             name="samples",
             hovertemplate="%{x}<br>%{customdata}<br>val = %{y:.3f}<extra></extra>",
             customdata=df["Sample"],
@@ -2354,18 +2690,18 @@ def _plot_figure(
     value_col: str,
     y_label: str,
     color_map: dict[str, str],
+    dark: bool = False,
 ) -> go.Figure:
     fig = go.Figure()
-    _add_bar_traces(fig, df, use_group, value_col, color_map)
+    _add_bar_traces(fig, df, use_group, value_col, color_map, dark=dark)
     fig.update_layout(
         title=dict(text=f"{target} / {ref}", x=0.5, xanchor="center"),
         yaxis_title=y_label,
         xaxis_title="",
-        template="plotly_white",
         showlegend=False,
         margin=dict(l=40, r=10, t=50, b=40),
-        plot_bgcolor="white",
         modebar=dict(remove=["lasso2d", "select2d"]),
+        **_plotly_layout(dark),
     )
     return fig
 
