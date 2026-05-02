@@ -77,7 +77,7 @@ python -m venv qpcr-venv
 qpcr-venv\Scripts\Activate.ps1
 
 # 3. Install qPCR Analyzer from GitHub
-pip install "git+https://github.com/<your-org>/qpcr-analyzer.git"
+pip install "git+https://github.com/j-y26/qpcr-analyzer.git"
 
 # 4. Run it
 qpcr-analyzer
@@ -97,7 +97,7 @@ python3 -m venv qpcr-venv
 source qpcr-venv/bin/activate
 
 # 3. Install qPCR Analyzer from GitHub
-pip install "git+https://github.com/<your-org>/qpcr-analyzer.git"
+pip install "git+https://github.com/j-y26/qpcr-analyzer.git"
 
 # 4. Run it
 qpcr-analyzer
@@ -120,7 +120,7 @@ python3 -m venv qpcr-venv
 source qpcr-venv/bin/activate
 
 # 3. Install qPCR Analyzer from GitHub
-pip install "git+https://github.com/<your-org>/qpcr-analyzer.git"
+pip install "git+https://github.com/j-y26/qpcr-analyzer.git"
 
 # 4. Run it
 qpcr-analyzer
@@ -130,20 +130,20 @@ qpcr-analyzer
 
 | Extra  | Purpose | Install command |
 |--------|---------|-----------------|
-| `xls`  | Read legacy `.xls` files (Excel 97-2003) | `pip install "qpcr-analyzer[xls] @ git+https://github.com/<your-org>/qpcr-analyzer.git"` |
+| `xls`  | Read legacy `.xls` files (Excel 97-2003) | `pip install "qpcr-analyzer[xls] @ git+https://github.com/j-y26/qpcr-analyzer.git"` |
 | `dev`  | Test runner + linter for contributors | `pip install -e ".[dev]"` (after cloning) |
 
 ### Installing a specific version
 
 ```bash
-pip install "git+https://github.com/<your-org>/qpcr-analyzer.git@v2.1.0"
+pip install "git+https://github.com/j-y26/qpcr-analyzer.git@v2.1.0"
 ```
 
 ### Upgrading
 
 ```bash
 pip install --upgrade --force-reinstall \
-    "git+https://github.com/<your-org>/qpcr-analyzer.git"
+    "git+https://github.com/j-y26/qpcr-analyzer.git"
 ```
 
 ### Uninstalling
@@ -162,7 +162,7 @@ Use this when you want to try the app, run the test suite, or modify the
 source code.
 
 ```bash
-git clone https://github.com/<your-org>/qpcr-analyzer.git
+git clone https://github.com/j-y26/qpcr-analyzer.git
 cd qpcr-analyzer
 
 # create + activate a venv (see platform sections above)
@@ -192,7 +192,7 @@ automatically.
 # 1. Install into a clean venv (system-wide is fine but not required)
 python3 -m venv /opt/qpcr-analyzer
 /opt/qpcr-analyzer/bin/pip install \
-    "qpcr-analyzer[xls] @ git+https://github.com/<your-org>/qpcr-analyzer.git"
+    "qpcr-analyzer[xls] @ git+https://github.com/j-y26/qpcr-analyzer.git"
 
 # 2. Run the server bound to all interfaces on the standard port
 QPCR_HOST=0.0.0.0 QPCR_PORT=8090 /opt/qpcr-analyzer/bin/qpcr-analyzer
