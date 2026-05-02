@@ -56,9 +56,15 @@ LOCATIONS: list[Location] = [
     ),
     Location(
         path=ROOT / "README.md",
-        pattern=re.compile(rf"qpcr-analyzer\.git@v{SEMVER}"),
-        template="qpcr-analyzer.git@v{version}",
-        label="README.md :: install-URL example",
+        pattern=re.compile(rf"pip install qpcr-analyzer=={SEMVER}"),
+        template="pip install qpcr-analyzer=={version}",
+        label="README.md :: PyPI pinned-version example",
+    ),
+    Location(
+        path=ROOT / "README.md",
+        pattern=re.compile(rf"py_qpcr_analyzer\.git@v{SEMVER}"),
+        template="py_qpcr_analyzer.git@v{version}",
+        label="README.md :: source-install tag example",
     ),
 ]
 

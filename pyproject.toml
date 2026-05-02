@@ -9,17 +9,18 @@ description = "Lightweight browser-based qPCR data analysis with ΔCt and batch-
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Jielin Yang", email = "jielin.yang@sickkids.ca" }]
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 keywords = ["qPCR", "RT-PCR", "gene expression", "bioinformatics"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Operating System :: OS Independent",
 ]
 dependencies = [
     "nicegui>=2.0",
@@ -44,6 +45,15 @@ qpcr-analyzer = "qpcr_analyzer.__main__:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/qpcr_analyzer"]
 
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/qpcr_analyzer",
+    "tests",
+    "README.md",
+    "LICENSE",
+    "pyproject.toml",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
@@ -55,3 +65,8 @@ target-version = "py310"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP"]
 ignore = ["E501"]
+
+[project.urls]
+Homepage   = "https://github.com/j-y26/py_qpcr_analyzer"
+Repository = "https://github.com/j-y26/py_qpcr_analyzer"
+Issues     = "https://github.com/j-y26/py_qpcr_analyzer/issues"
