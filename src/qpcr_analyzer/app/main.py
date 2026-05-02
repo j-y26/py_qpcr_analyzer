@@ -36,6 +36,7 @@ from qpcr_analyzer.core import (
     compute_delta_ct,
     compute_delta_delta_ct,
     detect_columns,
+    group_order,
     mark_outliers,
     read_table,
     results_to_csv_zip_bytes,
@@ -1914,6 +1915,15 @@ def _render_downloads(state: dict, refs: dict) -> None:
             std = std.drop(columns=["Batch"])
         return std
 
+    def _build_ddct() -> dict[str, pd.DataFrame]:
+        # ddCt always carries a Batch column (defaulting to "batch_1") since
+        # compute_delta_delta_ct is batch-aware. Strip it from the export
+        # when the user said samples are *not* from different batches.
+        results = state["ddct_results"] or {}
+        if state.get("has_batches"):
+            return results
+        return {k: v.drop(columns=["Batch"], errors="ignore") for k, v in results.items()}
+
     with panel:
         ui.label("Excel workbook").classes("text-base font-semibold")
         ui.label(
@@ -1927,7 +1937,7 @@ def _render_downloads(state: dict, refs: dict) -> None:
                 data = results_to_xlsx_bytes(
                     _build_std(),
                     state["dct_results"] or {},
-                    state["ddct_results"] or {},
+                    _build_ddct(),
                 )
             except Exception as ex:  # noqa: BLE001
                 ui.notify(f"Excel build failed: {ex}", type="negative")
@@ -1951,7 +1961,7 @@ def _render_downloads(state: dict, refs: dict) -> None:
                 data = results_to_csv_zip_bytes(
                     _build_std(),
                     state["dct_results"] or {},
-                    state["ddct_results"] or {},
+                    _build_ddct(),
                 )
             except Exception as ex:  # noqa: BLE001
                 ui.notify(f"CSV bundle build failed: {ex}", type="negative")

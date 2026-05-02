@@ -23,6 +23,31 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from .summary import group_order, sample_order, target_order
+
+
+def _sort_results_by_appearance(
+    result_df: pd.DataFrame, source_df: pd.DataFrame
+) -> pd.DataFrame:
+    """Order result rows by Target → Group → Sample, file-appearance ranks.
+
+    Ranks are derived from ``source_df`` (the standardised input) so the
+    ordering matches the order labels first appear in the upload. Rows whose
+    Target / Group / Sample is missing from the source — should not happen
+    in practice, but defensively handled — are pushed to the end.
+    """
+    target_rank = {t: i for i, t in enumerate(target_order(source_df))}
+    group_rank = {g: i for i, g in enumerate(group_order(source_df))}
+    sample_rank = {s: i for i, s in enumerate(sample_order(source_df))}
+    out = result_df.copy()
+    out["__t_rank"] = out["Target"].astype(str).map(target_rank).fillna(len(target_rank))
+    out["__g_rank"] = out["Group"].astype(str).map(group_rank).fillna(len(group_rank))
+    out["__s_rank"] = out["Sample"].astype(str).map(sample_rank).fillna(len(sample_rank))
+    out = out.sort_values(
+        by=["__t_rank", "__g_rank", "__s_rank"], kind="mergesort"
+    ).drop(columns=["__t_rank", "__g_rank", "__s_rank"])
+    return out.reset_index(drop=True)
+
 
 def compute_mean_cq(df: pd.DataFrame) -> pd.DataFrame:
     """Mean Cq per (Target, Group, Sample), dropping excluded/NaN wells."""
@@ -137,10 +162,11 @@ def compute_delta_ct(
         merged["dCt"] = merged["Mean_Cq"] - merged[ref_col]
         merged["Expr_vs_HK"] = np.power(2.0, -merged["dCt"])
         merged["Reference_Gene"] = ref
-        results[ref] = merged[
+        ordered = merged[
             ["Target", "Group", "Sample", "Mean_Cq", ref_col,
              "dCt", "Expr_vs_HK", "Reference_Gene"]
-        ].reset_index(drop=True)
+        ]
+        results[ref] = _sort_results_by_appearance(ordered, df)
     return results
 
 
@@ -227,12 +253,13 @@ def compute_delta_delta_ct(
         merged["Reference_Group"] = reference_group
 
         ref_col = f"Mean_Cq_{ref}"
-        results[ref] = merged[
+        ordered = merged[
             [
                 "Target", "Group", "Sample", "Batch",
                 "Mean_Cq", ref_col,
                 "dCt", "Ref_dCt", "ddCt", "Relative_Expr",
                 "Is_Reference_Group", "Reference_Gene", "Reference_Group",
             ]
-        ].reset_index(drop=True)
+        ]
+        results[ref] = _sort_results_by_appearance(ordered, df)
     return results
