@@ -100,6 +100,12 @@ _GLOBAL_CSS = """
                 border-color 180ms ease, background-color 180ms ease;
   }
 
+  /* Default surface for any card-like container we mark `qpcr-card`. Lets
+     us set a single dark-mode override for every result/summary card. */
+  .qpcr-card { background-color: #ffffff; }
+  /* Smaller in-card panel; same white-then-slate surface story. */
+  .qpcr-subcard { background-color: #ffffff; }
+
   /* Subtle lift for cards on hover (skip the two big page panes) */
   .qpcr-card:hover {
     box-shadow: 0 10px 24px -12px rgba(15, 23, 42, 0.18),
@@ -337,6 +343,13 @@ _GLOBAL_CSS = """
   body.body--dark .qpcr-chip {
     background: linear-gradient(180deg, rgba(30,41,59,0.85), rgba(15,23,42,0.85)) !important;
   }
+  /* Every card-like surface we own: slate-800 in dark mode. The
+     `.qpcr-hk-tile` keeps its blue→indigo gradient (defined later). */
+  body.body--dark .qpcr-card:not(.qpcr-hk-tile),
+  body.body--dark .qpcr-subcard {
+    background-color: #1e293b !important;
+    background: #1e293b !important;
+  }
 
   /* Empty-state placeholder (used in every still-empty output tab) */
   body.body--dark .qpcr-empty-state {
@@ -387,10 +400,22 @@ _GLOBAL_CSS = """
   }
 
   /* ── Quasar dark refinements ────────────────────────────────────── */
-  body.body--dark .q-card {
-    background: #1e293b;
+  body.body--dark .q-card,
+  body.body--dark .q-card.bg-white {
+    background: #1e293b !important;
+    background-color: #1e293b !important;
     color: #e2e8f0;
     border-color: #334155;
+  }
+  /* Quasar expansion (right-pane Samples/Targets/Groups) — its header
+     and content surfaces both default to white. */
+  body.body--dark .q-expansion-item__container,
+  body.body--dark .q-expansion-item .q-item,
+  body.body--dark .q-expansion-item__content,
+  body.body--dark .q-expansion-item__container.bg-white {
+    background: #1e293b !important;
+    background-color: #1e293b !important;
+    color: #e2e8f0;
   }
   body.body--dark .q-table {
     background: rgba(30,41,59,0.6) !important;
@@ -427,7 +452,16 @@ _GLOBAL_CSS = """
     color: #e2e8f0;
   }
   body.body--dark .q-uploader__list { color: #cbd5e1; }
-  body.body--dark .q-uploader__subtitle { color: #94a3b8; }
+  body.body--dark .q-uploader__subtitle,
+  body.body--dark .q-uploader__title,
+  body.body--dark .q-uploader__file,
+  body.body--dark .q-uploader__file-header,
+  body.body--dark .q-uploader__file-header-content,
+  body.body--dark .q-uploader__file-status,
+  body.body--dark .q-uploader__dnd { color: #e2e8f0 !important; }
+  body.body--dark .q-uploader__file { background: rgba(15,23,42,0.6) !important; }
+  body.body--dark .q-uploader__file--img .q-uploader__file-header { background: rgba(15,23,42,0.85) !important; }
+  body.body--dark .q-uploader .q-linear-progress__track { background: rgba(148,163,184,0.25) !important; }
 
   /* Form inputs / selects */
   body.body--dark .q-field__control,
@@ -488,16 +522,23 @@ def _build_color_map(items: list[str]) -> dict[str, str]:
 
 
 def _plotly_layout(dark: bool) -> dict:
-    """Layout fragment that swaps template + transparent paper/plot bg.
+    """Layout fragment that swaps template + paper/plot backgrounds.
 
-    Transparent backgrounds let the surrounding card surface (white in
-    light mode, slate-800 in dark mode) show through, so the figure
-    blends with the page in either theme.
+    Light mode keeps the original white surface; dark mode paints both
+    surfaces with a dark slate so bars / gridlines stay readable inside
+    the figure even when the surrounding card is dark.
     """
+    if dark:
+        return {
+            "template": "plotly_dark",
+            "plot_bgcolor": "#0f172a",
+            "paper_bgcolor": "#1e293b",
+            "font": {"color": "#e2e8f0"},
+        }
     return {
-        "template": "plotly_dark" if dark else "plotly_white",
-        "plot_bgcolor": "rgba(0,0,0,0)",
-        "paper_bgcolor": "rgba(0,0,0,0)",
+        "template": "plotly_white",
+        "plot_bgcolor": "white",
+        "paper_bgcolor": "white",
     }
 
 
@@ -1609,7 +1650,7 @@ def _render_groups(state: dict, refs: dict) -> None:
 
         with ui.card().classes(
             "qpcr-card w-full rounded-xl shadow-sm "
-            "border border-slate-200 bg-white p-3"
+            "border border-slate-200 p-3"
         ):
             grid_classes = (
                 "grid grid-cols-3 gap-x-3 gap-y-2 items-center w-full"
@@ -2068,7 +2109,7 @@ def _render_excluded_samples_panel(state: dict, refs: dict) -> None:
             # ── (b) Sample exclusion summary ────────────────────────────
             with ui.card().classes(
                 "qpcr-card flex-1 min-w-[260px] rounded-xl shadow-sm "
-                "border border-slate-200 bg-white"
+                "border border-slate-200"
             ):
                 with ui.row().classes("items-center gap-2"):
                     ui.icon("person_off").classes("text-rose-700")
@@ -2113,11 +2154,11 @@ def _render_excluded_samples_panel(state: dict, refs: dict) -> None:
                         hk_excl = _by_file_order(set(excludes.get(hk, set())))
                         only_hk = [s for s in hk_excl if s not in global_excl]
                         with ui.element("div").classes(
-                            "w-full mt-1 p-2 rounded border "
+                            "qpcr-subcard w-full mt-1 p-2 rounded border "
                             + (
                                 "border-amber-200 bg-amber-50"
                                 if hk_excl
-                                else "border-slate-200 bg-white"
+                                else "border-slate-200"
                             )
                         ):
                             ui.label(f"Housekeeping: {hk}").classes(
@@ -2141,7 +2182,7 @@ def _render_excluded_samples_panel(state: dict, refs: dict) -> None:
             # ── (c) Well exclusion summary ──────────────────────────────
             with ui.card().classes(
                 "qpcr-card flex-1 min-w-[260px] rounded-xl shadow-sm "
-                "border border-slate-200 bg-white"
+                "border border-slate-200"
             ):
                 with ui.row().classes("items-center gap-2"):
                     ui.icon("rule").classes("text-amber-700")
@@ -2316,7 +2357,7 @@ def _render_dct_results(state: dict, refs: dict) -> None:
         for ref, res_df in results.items():
             with ui.card().classes(
                 "qpcr-card w-full border border-slate-200 rounded-xl "
-                "shadow-sm bg-white"
+                "shadow-sm"
             ):
                 with ui.row().classes("items-center gap-3"):
                     ui.icon("show_chart").classes("text-blue-600")
@@ -2357,7 +2398,7 @@ def _render_ddct_results(state: dict, refs: dict) -> None:
         for ref, res_df in results.items():
             with ui.card().classes(
                 "qpcr-card w-full border border-slate-200 rounded-xl "
-                "shadow-sm bg-white"
+                "shadow-sm"
             ):
                 with ui.row().classes("items-center gap-3"):
                     ui.icon("bar_chart").classes("text-indigo-600")
