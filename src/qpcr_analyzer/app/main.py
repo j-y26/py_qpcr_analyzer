@@ -626,6 +626,75 @@ def _refresh_step_gates(state: dict, refs: dict) -> None:
             refs["dct_run_btn"].disable()
 
 
+def _invalidate_results(state: dict, refs: dict) -> None:
+    """Drop computed ΔCt / ΔΔCt results and reset their UI surfaces.
+
+    Once the user touches anything in steps 1–5 the displayed plots and
+    download buttons no longer match the current configuration, so they
+    must vanish until the user re-runs ΔCt (and optionally ΔΔCt). Without
+    this, an inline edit (e.g. flipping a sample's group) would leave
+    stale plots and a download that exports values inconsistent with the
+    inputs now on screen.
+    """
+    had_results = bool(
+        state.get("dct_done")
+        or state.get("dct_results")
+        or state.get("ddct_results")
+    )
+
+    state["dct_done"] = False
+    state["dct_results"] = None
+    state["ddct_results"] = None
+    state["reference_group"] = None
+
+    panel = refs.get("dct_panel")
+    if panel is not None:
+        panel.clear()
+        with panel:
+            _empty_state("show_chart", "Run ΔCt to populate this tab.")
+
+    panel = refs.get("ddct_panel")
+    if panel is not None:
+        panel.clear()
+        with panel:
+            _empty_state("bar_chart", "Run ΔΔCt to populate this tab.")
+
+    panel = refs.get("downloads_panel")
+    if panel is not None:
+        panel.clear()
+        with panel:
+            _empty_state(
+                "download",
+                "Downloads (Excel workbook + per-figure PNG) appear after "
+                "analyses run.",
+            )
+
+    container = refs.get("ddct_container")
+    if container is not None:
+        container.clear()
+        with container:
+            ui.label(
+                "Reference group, batch summary, and the run button appear "
+                "here once ΔCt has succeeded."
+            ).classes("text-xs text-slate-500")
+        # The ref-group select lived inside ddct_container — drop the stale
+        # ref so a future ΔCt run reads from the freshly rebuilt one.
+        refs.pop("ref_group_sel", None)
+
+    if "ddct_run_btn" in refs:
+        refs["ddct_run_btn"].disable()
+
+    status = refs.get("dct_status")
+    if status is not None:
+        status.set_text("")
+
+    if had_results:
+        ui.notify(
+            "Earlier step changed — re-run ΔCt to refresh results.",
+            type="warning",
+        )
+
+
 @ui.page("/")
 def index() -> None:
     """Render the two-pane workflow."""
@@ -883,6 +952,7 @@ def _build_step_upload(state: dict, refs: dict, stepper) -> None:
             for k in ("mapping", "groups", "outliers"):
                 state["step_done"][k] = False
             state["hk_applied"] = False
+            _invalidate_results(state, refs)
             _refresh_step_gates(state, refs)
 
         ui.upload(on_upload=on_upload, auto_upload=True, max_files=1).props(
@@ -1573,6 +1643,15 @@ def _render_mapping(state: dict, refs: dict) -> None:
                 def _on_change(e, role=role, sel=sel) -> None:  # noqa: ARG001
                     v = sel.value
                     mapping.assignments[role] = None if v == "(none)" else v
+                    # Mapping change invalidates everything downstream —
+                    # standardised data, groups/batches, exclusions, and
+                    # any computed ΔCt / ΔΔCt results.
+                    state["step_done"]["mapping"] = False
+                    state["step_done"]["groups"] = False
+                    state["step_done"]["outliers"] = False
+                    state["hk_applied"] = False
+                    _invalidate_results(state, refs)
+                    _refresh_step_gates(state, refs)
 
                 sel.on_value_change(_on_change)
 
@@ -1702,6 +1781,11 @@ def _render_groups(state: dict, refs: dict) -> None:
                         v = (str(sel.value).strip() if sel.value else "")
                         row["Group"] = v or "unassigned"
                         _refresh_group_options()
+                        state["step_done"]["groups"] = False
+                        state["step_done"]["outliers"] = False
+                        state["hk_applied"] = False
+                        _invalidate_results(state, refs)
+                        _refresh_step_gates(state, refs)
 
                     g_sel.on_value_change(
                         lambda e, row=row, sel=g_sel: _on_group(e, row=row, sel=sel)
@@ -1724,6 +1808,11 @@ def _render_groups(state: dict, refs: dict) -> None:
                         row["Batch"] = v or "batch_1"
                         state["sample_batches"][str(row["Sample"])] = row["Batch"]
                         _refresh_batch_options()
+                        state["step_done"]["groups"] = False
+                        state["step_done"]["outliers"] = False
+                        state["hk_applied"] = False
+                        _invalidate_results(state, refs)
+                        _refresh_step_gates(state, refs)
 
                     b_sel.on_value_change(
                         lambda e, row=row, sel=b_sel: _on_batch(e, row=row, sel=sel)
@@ -1740,6 +1829,11 @@ def _render_groups(state: dict, refs: dict) -> None:
         def _on_batch_toggle(_e=None) -> None:
             state["has_batches"] = bool(batch_toggle.value)
             _apply_batch_enabled(state["has_batches"])
+            state["step_done"]["groups"] = False
+            state["step_done"]["outliers"] = False
+            state["hk_applied"] = False
+            _invalidate_results(state, refs)
+            _refresh_step_gates(state, refs)
 
         batch_toggle.on_value_change(_on_batch_toggle)
         # Apply initial enabled state right after the dropdowns exist.
@@ -1772,6 +1866,10 @@ def _render_outliers(state: dict, refs: dict) -> None:
                 if new_tol != state["tolerance"]:
                     state["tolerance"] = new_tol
                     state["_outliers_initialized"] = False
+                    state["step_done"]["outliers"] = False
+                    state["hk_applied"] = False
+                    _invalidate_results(state, refs)
+                    _refresh_step_gates(state, refs)
                 _rebuild_outlier_view(state, refs)
 
             ui.button("Apply tolerance", on_click=_apply_tol).props(
@@ -1817,8 +1915,9 @@ def _rebuild_outlier_view(state: dict, refs: dict) -> None:
             _render_excluded_blocks(state, refs)
             # Excluded wells affect which samples lack a valid housekeeping
             # Cq, so the user must re-Apply on step 5 if they had already
-            # confirmed.
+            # confirmed — and any displayed ΔCt / ΔΔCt results are stale.
             state["hk_applied"] = False
+            _invalidate_results(state, refs)
             _refresh_step_gates(state, refs)
             _render_excluded_samples_panel(state, refs)
 
@@ -1862,6 +1961,8 @@ def _render_housekeeping(state: dict, refs: dict) -> None:
             refs["hk_status_label"].classes(
                 replace="text-sm text-amber-700"
             )
+        _invalidate_results(state, refs)
+        _refresh_step_gates(state, refs)
         _render_excluded_samples_panel(state, refs)
 
     with container:
