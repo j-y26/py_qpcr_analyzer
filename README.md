@@ -157,7 +157,7 @@ qpcr-analyzer
 #### Installing a specific version
 
 ```bash
-pip install qpcr-analyzer==2.1.0
+pip install qpcr-analyzer==2.1.1
 ```
 
 #### Upgrading
@@ -181,7 +181,7 @@ For unreleased changes from `main`, or to develop against the codebase:
 pip install "git+https://github.com/j-y26/py_qpcr_analyzer.git"
 
 # A specific tag
-pip install "git+https://github.com/j-y26/py_qpcr_analyzer.git@v2.1.0"
+pip install "git+https://github.com/j-y26/py_qpcr_analyzer.git@v2.1.1"
 
 # With the xls extra
 pip install "qpcr-analyzer[xls] @ git+https://github.com/j-y26/py_qpcr_analyzer.git"
