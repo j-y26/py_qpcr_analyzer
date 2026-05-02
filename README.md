@@ -23,7 +23,7 @@ Supports both **ΔCt** (housekeeping-gene normalisation) and **batch-aware ΔΔC
    - [Production environment](#production-environment-lab-server)
 4. [Usage walkthrough](#usage-walkthrough)
 5. [Methods](#methods)
-6. [Output workbook](#output-workbook)
+6. [Outputs](#outputs)
 7. [Programmatic API](#programmatic-api)
 8. [Project layout](#project-layout)
 9. [Testing](#testing)
@@ -64,7 +64,20 @@ pip --version
 > virtual environment so qPCR Analyzer's dependencies don't collide with
 > other Python tools on your system. Commands below assume one is active.
 
-### Windows
+### Install from PyPI (recommended)
+
+Once a virtual environment is active (see per-OS setup below):
+
+```bash
+pip install qpcr-analyzer                    # core install
+pip install "qpcr-analyzer[xls]"             # + legacy .xls support
+qpcr-analyzer                                # launch the app
+```
+
+#### Per-OS setup (Python + virtual environment)
+
+<details>
+<summary><b>Windows</b></summary>
 
 PowerShell, from any folder you like:
 
@@ -76,8 +89,8 @@ PowerShell, from any folder you like:
 python -m venv qpcr-venv
 qpcr-venv\Scripts\Activate.ps1
 
-# 3. Install qPCR Analyzer from GitHub
-pip install "git+https://github.com/j-y26/qpcr-analyzer.git"
+# 3. Install qPCR Analyzer from PyPI
+pip install qpcr-analyzer
 
 # 4. Run it
 qpcr-analyzer
@@ -86,7 +99,10 @@ qpcr-analyzer
 If PowerShell blocks the activation script, run once:
 `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
 
-### macOS
+</details>
+
+<details>
+<summary><b>macOS</b></summary>
 
 ```bash
 # 1. Install Python (Homebrew is easiest)
@@ -96,8 +112,8 @@ brew install python@3.12
 python3 -m venv qpcr-venv
 source qpcr-venv/bin/activate
 
-# 3. Install qPCR Analyzer from GitHub
-pip install "git+https://github.com/j-y26/qpcr-analyzer.git"
+# 3. Install qPCR Analyzer from PyPI
+pip install qpcr-analyzer
 
 # 4. Run it
 qpcr-analyzer
@@ -107,7 +123,10 @@ On Apple Silicon, all required wheels (`pandas`, `numpy`, `openpyxl`,
 `plotly`, `rapidfuzz`, `nicegui`) are published as native arm64, so
 installation does not need to compile from source.
 
-### Linux
+</details>
+
+<details>
+<summary><b>Linux</b></summary>
 
 ```bash
 # 1. Make sure python3-venv is available (Debian/Ubuntu)
@@ -119,37 +138,53 @@ sudo apt install python3 python3-venv python3-pip      # Debian/Ubuntu
 python3 -m venv qpcr-venv
 source qpcr-venv/bin/activate
 
-# 3. Install qPCR Analyzer from GitHub
-pip install "git+https://github.com/j-y26/qpcr-analyzer.git"
+# 3. Install qPCR Analyzer from PyPI
+pip install qpcr-analyzer
 
 # 4. Run it
 qpcr-analyzer
 ```
 
-### Optional extras
+</details>
+
+#### Optional extras
 
 | Extra  | Purpose | Install command |
 |--------|---------|-----------------|
-| `xls`  | Read legacy `.xls` files (Excel 97-2003) | `pip install "qpcr-analyzer[xls] @ git+https://github.com/j-y26/qpcr-analyzer.git"` |
+| `xls`  | Read legacy `.xls` files (Excel 97-2003) | `pip install "qpcr-analyzer[xls]"` |
 | `dev`  | Test runner + linter for contributors | `pip install -e ".[dev]"` (after cloning) |
 
-### Installing a specific version
+#### Installing a specific version
 
 ```bash
-pip install "git+https://github.com/j-y26/qpcr-analyzer.git@v2.1.0"
+pip install qpcr-analyzer==2.1.0
 ```
 
-### Upgrading
+#### Upgrading
 
 ```bash
-pip install --upgrade --force-reinstall \
-    "git+https://github.com/j-y26/qpcr-analyzer.git"
+pip install --upgrade qpcr-analyzer
 ```
 
-### Uninstalling
+#### Uninstalling
 
 ```bash
 pip uninstall qpcr-analyzer
+```
+
+### Install from source (GitHub)
+
+For unreleased changes from `main`, or to develop against the codebase:
+
+```bash
+# Latest commit on main
+pip install "git+https://github.com/j-y26/py_qpcr_analyzer.git"
+
+# A specific tag
+pip install "git+https://github.com/j-y26/py_qpcr_analyzer.git@v2.1.0"
+
+# With the xls extra
+pip install "qpcr-analyzer[xls] @ git+https://github.com/j-y26/py_qpcr_analyzer.git"
 ```
 
 ---
@@ -162,7 +197,7 @@ Use this when you want to try the app, run the test suite, or modify the
 source code.
 
 ```bash
-git clone https://github.com/j-y26/qpcr-analyzer.git
+git clone https://github.com/j-y26/py_qpcr_analyzer.git
 cd qpcr-analyzer
 
 # create + activate a venv (see platform sections above)
@@ -191,8 +226,7 @@ automatically.
 ```bash
 # 1. Install into a clean venv (system-wide is fine but not required)
 python3 -m venv /opt/qpcr-analyzer
-/opt/qpcr-analyzer/bin/pip install \
-    "qpcr-analyzer[xls] @ git+https://github.com/j-y26/qpcr-analyzer.git"
+/opt/qpcr-analyzer/bin/pip install "qpcr-analyzer[xls]"
 
 # 2. Run the server bound to all interfaces on the standard port
 QPCR_HOST=0.0.0.0 QPCR_PORT=8090 /opt/qpcr-analyzer/bin/qpcr-analyzer
@@ -205,7 +239,7 @@ Then point colleagues at `http://<server-hostname>:8090`.
 | Variable    | Default     | Description                                          |
 |-------------|-------------|------------------------------------------------------|
 | `QPCR_HOST` | `127.0.0.1` | Bind address. Use `0.0.0.0` to expose on the LAN.    |
-| `QPCR_PORT` | `8090`      | TCP port. (Default avoids clashing with Thermo Fisher's *Design & Analysis* software, which listens on 8080.) |
+| `QPCR_PORT` | `8090`      | TCP port. |
 
 #### Run as a systemd service (Linux)
 
@@ -253,35 +287,44 @@ nssm start qpcr-analyzer
   (nginx + `auth_basic`, Caddy + Authelia, …).
 * Use `https` via your reverse proxy if exposing beyond the host machine.
 * Every uploaded file stays in memory only; nothing is written to disk
-  unless the user clicks **Download xlsx**.
+  unless the user clicks one of the **Download** buttons (xlsx, CSV
+  bundle, or per-figure PNG).
 
 ---
 
 ## Usage walkthrough
 
-The interface is a five-step stepper:
+The left pane is a seven-step stepper; each step's *Continue* button
+unlocks once the prior step is complete. The right pane shows live
+results across tabs (*Summary*, *Data preview*, *Excluded blocks*,
+*Housekeeping & exclusions*, *ΔCt results*, *ΔΔCt results*, *Downloads*).
 
 | Step | What you do |
 |------|-------------|
-| **1. Upload**             | Drop in an `.xlsx`, `.xls`, `.csv`, `.tsv`, or `.txt` file (one row per well). |
-| **2. Column mapping**     | Confirm or adjust auto-detected role assignments (Well, Target, Sample, Cq, Group). |
-| **3. Groups & batches**   | Review which samples belong to which biological group. Optionally assign samples to **batches** if they come from multiple independent runs. |
-| **4. Reference & outliers** | Choose the **reference group** (ΔΔCt anchor), **housekeeping gene(s)**, and replicate tolerance. Exclude outlier wells. |
-| **5. Results**            | Inspect ΔCt and ΔΔCt bar charts. Download the Excel workbook. |
+| **1. Upload data**            | Drop in an `.xlsx`, `.xls`, `.csv`, `.tsv`, or `.txt` file (one row per well). |
+| **2. Column mapping**         | Confirm or adjust auto-detected role assignments (Well, Target, Sample, Cq, plus optional Group and Batch). |
+| **3. Groups & batches**       | Review or assign each sample's biological group. Optionally toggle multi-batch mode and assign samples to **batches** if they come from multiple independent runs. |
+| **4. Outliers**               | Adjust replicate tolerance and exclude outlier wells. The app keeps the tightest contiguous run of replicates within tolerance and flags the rest; NaN Cq values are always flagged. |
+| **5. Housekeeping gene(s)**   | Pick one or more housekeeping genes, review which samples lack a usable HK Cq (skipped per HK), and click **Apply** to lock the selection. |
+| **6. Run ΔCt**                | Compute ΔCt per housekeeping gene. No reference group needed — bar plots and downloads populate immediately. |
+| **7. Run ΔΔCt** *(optional)*  | Pick the **reference group** (ΔΔCt anchor) and run batch-aware ΔΔCt. Each batch is anchored independently; results are merged for plotting. |
 
 ### Column auto-detection
 
 The detector scores every column name against a synonym list using exact,
 substring, and fuzzy matching (`rapidfuzz`). Columns scoring below 0.85
-are left unassigned and shown as "unmatched" in the UI.
+are left unassigned and shown as "unmatched" in the UI. **Group** and
+**Batch** are optional — leaving them as `(none)` is fine, you assign them
+in step 3.
 
-| Role   | Example column names                              |
-|--------|---------------------------------------------------|
-| Well   | Well, Well Position, Location                     |
-| Target | Target, Gene, Assay, Detector                     |
-| Sample | Sample, Sample ID, Sample Name                    |
-| Cq     | Cq, Ct, Cq Value, Ct Mean                         |
-| Group  | Group, Condition, Treatment, Biological Set Name  |
+| Role   | Required | Example column names                              |
+|--------|----------|---------------------------------------------------|
+| Well   | yes      | Well, Well Position, Location                     |
+| Target | yes      | Target, Gene, Assay, Detector                     |
+| Sample | yes      | Sample, Sample ID, Sample Name                    |
+| Cq     | yes      | Cq, Ct, Cq Value, Ct Mean                         |
+| Group  | no       | Group, Condition, Treatment, Biological Set Name  |
+| Batch  | no       | Batch, Run, Plate, Experiment                     |
 
 **Applied Biosystems note:** files typically contain both a numeric `Well`
 column (`1, 2, 3 …`) and an alphanumeric `Well Position` column
@@ -340,33 +383,59 @@ reference group for every measured target gene.
 
 ---
 
-## Output workbook
+## Outputs
 
-The downloaded `.xlsx` file contains:
+The **Downloads** tab offers three artefacts. All three reflect whatever
+exclusions, housekeeping selections, and reference group are currently
+configured — re-run ΔCt / ΔΔCt after any change to refresh them.
 
-| Sheet              | Contents                                                      |
-|--------------------|---------------------------------------------------------------|
-| `raw_data`         | Standardised well-level data, with `Excluded` flag.           |
-| `dCt_{HK}`         | Full ΔCt table (one per housekeeping gene).                   |
-| `ddCt_{HK}`        | Full ΔΔCt table including `Batch` and `Reference_Group`.      |
-| `prism_dCt_{HK}`   | Wide-format ΔCt table for GraphPad Prism.                     |
-| `prism_ddCt_{HK}`  | Wide-format Relative_Expr table for GraphPad Prism.           |
+### Excel workbook (`.xlsx`)
 
-### Prism sheet format
+| Sheet                  | Contents                                                                                                          |
+|------------------------|-------------------------------------------------------------------------------------------------------------------|
+| `raw_data`             | Standardised well-level data, sorted Target → Sample → Well, with `Excluded` flag.                                |
+| `dCt_{HK}`             | Long-format ΔCt table per housekeeping gene. Columns: `Target, Group, Sample, Mean_Cq, Mean_Cq_{HK}, dCt, Expr_vs_HK, Reference_Gene`. |
+| `formatted_dCt_{HK}`   | Wide grouped table of **`Expr_vs_HK` (= 2^−ΔCt)** with sample names per row — see layout below.                   |
+| `ddCt_{HK}`            | Long-format ΔΔCt table per housekeeping gene. Columns: `Target, Group, Sample, Batch, Mean_Cq, Mean_Cq_{HK}, dCt, Ref_dCt, ddCt, Relative_Expr, Is_Reference_Group, Reference_Gene, Reference_Group`. |
+| `formatted_ddCt_{HK}`  | Wide grouped table of **`Relative_Expr` (= 2^−ΔΔCt)** with sample names per row.                                  |
+
+The `Batch` column is included on `ddCt_*` sheets only when multi-batch
+mode is enabled in step 3; single-batch exports omit it.
+
+### CSV bundle (`.zip`)
+
+The same logical sheets as the Excel workbook, packed as one CSV per
+file inside a single zip archive (`raw_data.csv`, `dCt_*.csv`,
+`ddCt_*.csv`, `formatted_*.csv`). Use this when downstream tools prefer
+plain text.
+
+### Figures (`.png`)
+
+Each individual ΔCt / ΔΔCt bar plot has a built-in PNG export in its
+toolbar (camera icon). The **Downloads** tab additionally exposes one
+combined figure per housekeeping gene — every target packed into a
+single PNG — for ΔCt and (if run) ΔΔCt.
+
+### Formatted sheet layout
 
 ```
-Target         Control    Treatment    KO
-GeneX
-               1.05       2.31         0.45
-               0.93       2.15         0.52
-               1.02       2.48         0.41
-
-GeneY
-               0.88       1.72         …
+Target  | Sample (Control) | Relative Expression (Control) | Sample (Treatment) | Relative Expression (Treatment) | …
+GeneX   |                  |                               |                    |                                 |
+        | s1               | 1.05                          | s4                 | 2.31                            |
+        | s2               | 0.93                          | s5                 | 2.15                            |
+        | s3               | 1.02                          | s6                 | 2.48                            |
+        |                  |                               |                    |                                 |
+GeneY   |                  |                               |                    |                                 |
+        | s1               | 0.88                          | s4                 | 1.72                            |
+        | …                | …                             | …                  | …                               |
 ```
 
-Each block is a separate target gene. Paste directly into a Prism
-**Grouped** table (rows = replicates, column sets = groups).
+One block per target gene, separated by a blank row. Each biological
+group contributes two adjacent columns — the sample name and its value —
+so row provenance is preserved. Groups with fewer samples are padded
+with blanks. Every value is parity-checked against the long-format
+source at build time; a mismatch raises `ValueError` rather than
+silently writing inconsistent data.
 
 ---
 
@@ -386,6 +455,7 @@ from qpcr_analyzer.core import (
     compute_delta_ct,
     compute_delta_delta_ct,
     results_to_xlsx_bytes,
+    results_to_csv_zip_bytes,
 )
 
 # 1. Load data
@@ -417,10 +487,15 @@ ddct = compute_delta_delta_ct(
     sample_batches=batches,        # omit for single-batch data
 )
 
-# 7. Export
+# 7. Export — Excel workbook (raw + per-HK ΔCt/ΔΔCt + formatted_*)
 xlsx = results_to_xlsx_bytes(std, dct, ddct)
 with open("results.xlsx", "wb") as f:
     f.write(xlsx)
+
+# Or the same logical sheets as a zip of CSVs
+csv_zip = results_to_csv_zip_bytes(std, dct, ddct)
+with open("results.zip", "wb") as f:
+    f.write(csv_zip)
 ```
 
 ---
@@ -437,14 +512,15 @@ qpcr-analyzer/
 │   ├── __main__.py                     console-script entry point
 │   ├── app/
 │   │   ├── __init__.py
-│   │   └── main.py                     NiceGUI 5-step stepper UI + start()
+│   │   └── main.py                     NiceGUI 7-step stepper UI + start()
 │   └── core/                           pure-Python, no UI deps
 │       ├── __init__.py                 re-exports the public API
 │       ├── io.py                       file readers
 │       ├── columns.py                  column-role detection & mapping
 │       ├── outliers.py                 replicate outlier flagging
 │       ├── quant.py                    ΔCt and batch-aware ΔΔCt
-│       └── export.py                   Excel writer (raw + ΔCt + ΔΔCt + Prism)
+│       ├── summary.py                  well/sample/target ordering helpers
+│       └── export.py                   xlsx + CSV-zip writers (raw + ΔCt + ΔΔCt + formatted)
 └── tests/
     ├── test_columns.py
     ├── test_outliers.py
