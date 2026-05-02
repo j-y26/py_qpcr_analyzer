@@ -136,7 +136,7 @@ qpcr-analyzer
 ### Installing a specific version
 
 ```bash
-pip install "git+https://github.com/<your-org>/qpcr-analyzer.git@v2.0.0"
+pip install "git+https://github.com/<your-org>/qpcr-analyzer.git@v2.1.0"
 ```
 
 ### Upgrading

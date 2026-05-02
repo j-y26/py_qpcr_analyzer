@@ -11,5 +11,5 @@ The package is split so that ``core`` can be imported and used as a library
 without pulling in any UI dependencies.
 """
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 
