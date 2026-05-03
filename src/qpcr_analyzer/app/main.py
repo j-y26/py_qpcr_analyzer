@@ -28,6 +28,7 @@ from nicegui import events, ui
 from plotly.subplots import make_subplots
 
 from qpcr_analyzer import __version__
+from qpcr_analyzer.app._save import install_native_plotly_bridge, save_bytes
 from qpcr_analyzer.core import (
     ROLE_LABELS,
     ROLES,
@@ -700,6 +701,10 @@ def index() -> None:
     """Render the two-pane workflow."""
     state = _new_state()
     refs: dict[str, Any] = {}
+
+    # No-op in browser mode; in native (pywebview) mode this routes the
+    # Plotly camera-icon download through pywebview's "Save As…" dialog.
+    install_native_plotly_bridge()
 
     ui.add_head_html(_GLOBAL_CSS)
     ui.query("body").classes("min-h-screen text-slate-900")
@@ -2658,7 +2663,7 @@ def _render_downloads(state: dict, refs: dict) -> None:
             "wide grouped tables that show sample names alongside every value."
         ).classes("text-sm text-slate-600")
 
-        def _download_xlsx() -> None:
+        async def _download_xlsx() -> None:
             try:
                 data = results_to_xlsx_bytes(
                     _build_std(),
@@ -2668,7 +2673,11 @@ def _render_downloads(state: dict, refs: dict) -> None:
             except Exception as ex:  # noqa: BLE001
                 ui.notify(f"Excel build failed: {ex}", type="negative")
                 return
-            ui.download(data, f"{_filename_stem(state)}.xlsx")
+            await save_bytes(
+                data,
+                f"{_filename_stem(state)}.xlsx",
+                file_types=("Excel workbook (*.xlsx)", "All files (*.*)"),
+            )
 
         ui.button("Download xlsx", icon="download", on_click=_download_xlsx).props(
             "color=primary unelevated"
@@ -2682,7 +2691,7 @@ def _render_downloads(state: dict, refs: dict) -> None:
             "ddCt_*.csv, formatted_*.csv)."
         ).classes("text-sm text-slate-600")
 
-        def _download_csv_zip() -> None:
+        async def _download_csv_zip() -> None:
             try:
                 data = results_to_csv_zip_bytes(
                     _build_std(),
@@ -2692,7 +2701,11 @@ def _render_downloads(state: dict, refs: dict) -> None:
             except Exception as ex:  # noqa: BLE001
                 ui.notify(f"CSV bundle build failed: {ex}", type="negative")
                 return
-            ui.download(data, f"{_filename_stem(state)}.zip")
+            await save_bytes(
+                data,
+                f"{_filename_stem(state)}.zip",
+                file_types=("Zip archive (*.zip)", "All files (*.*)"),
+            )
 
         ui.button(
             "Download csv (zip)", icon="folder_zip", on_click=_download_csv_zip
