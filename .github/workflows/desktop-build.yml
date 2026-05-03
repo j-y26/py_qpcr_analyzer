@@ -90,16 +90,12 @@ jobs:
             dist/qpcr-analyzer-*-windows-x64-portable.zip
 
   macos:
-    name: macOS .dmg (${{ matrix.arch }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: macos-13      # Intel x86_64
-            arch: intel
-          - runner: macos-latest  # Apple Silicon arm64
-            arch: arm64
-    runs-on: ${{ matrix.runner }}
+    name: macOS .dmg (arm64)
+    # Apple Silicon only. GitHub retired the free `macos-13` (Intel) runner,
+    # so Intel users should run the app from source via `pip install`.
+    runs-on: macos-latest
+    env:
+      ARCH: arm64
     steps:
       - uses: actions/checkout@v6
 
@@ -149,14 +145,14 @@ jobs:
             --icon "qPCR Analyzer.app" 160 190 \
             --app-drop-link 440 190 \
             --no-internet-enable \
-            "dist/installer/qpcr-analyzer-${{ steps.version.outputs.version }}-macos-${{ matrix.arch }}.dmg" \
+            "dist/installer/qpcr-analyzer-${{ steps.version.outputs.version }}-macos-${{ env.ARCH }}.dmg" \
             "dist/qPCR Analyzer.app" \
           || (echo "create-dmg returned non-zero; verifying output exists" \
-              && ls -la "dist/installer/qpcr-analyzer-${{ steps.version.outputs.version }}-macos-${{ matrix.arch }}.dmg")
+              && ls -la "dist/installer/qpcr-analyzer-${{ steps.version.outputs.version }}-macos-${{ env.ARCH }}.dmg")
 
       - uses: actions/upload-artifact@v7
         with:
-          name: macos-${{ matrix.arch }}
+          name: macos-${{ env.ARCH }}
           path: dist/installer/*.dmg
 
       - name: Attach to GitHub Release
