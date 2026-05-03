@@ -710,9 +710,9 @@ def index() -> None:
     ui.query("body").classes("min-h-screen text-slate-900")
 
     # Dark mode controller — Quasar's body--dark class drives every variant
-    # rule defined in _GLOBAL_CSS. Default off (light mode).
-    dark = ui.dark_mode(value=False)
-    state["dark_mode"] = False
+    # rule defined in _GLOBAL_CSS. Default on (dark mode).
+    dark = ui.dark_mode(value=True)
+    state["dark_mode"] = True
 
     with ui.header(elevated=False).classes(
         "qpcr-header text-slate-900 items-center "
@@ -761,8 +761,8 @@ def index() -> None:
 
         refs["dark_btn"] = (
             ui.button(on_click=_toggle_dark)
-            .props("icon=dark_mode flat round dense color=primary")
-            .tooltip("Switch to dark mode")
+            .props("icon=light_mode flat round dense color=primary")
+            .tooltip("Switch to light mode")
         )
 
     with ui.row().classes("w-full no-wrap items-stretch gap-0 p-6"):
