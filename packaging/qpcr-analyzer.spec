@@ -40,6 +40,7 @@ hiddenimports += collect_submodules("webview")
 hiddenimports += [
     "qpcr_analyzer",
     "qpcr_analyzer.app.main",
+    "qpcr_analyzer.app._save",
     "qpcr_analyzer.core",
     "qpcr_analyzer.core.columns",
     "qpcr_analyzer.core.export",
@@ -47,6 +48,11 @@ hiddenimports += [
     "qpcr_analyzer.core.outliers",
     "qpcr_analyzer.core.quant",
     "qpcr_analyzer.core.summary",
+    # tkinter ships with CPython but PyInstaller's analysis sometimes misses
+    # filedialog when it's only referenced from a function imported at use
+    # site — list explicitly so the Save-As dialog works in the bundle.
+    "tkinter",
+    "tkinter.filedialog",
 ]
 
 block_cipher = None
@@ -62,7 +68,9 @@ a = Analysis(  # noqa: F821
     hooksconfig={},
     runtime_hooks=[],
     # Trim heavy unused libs that pandas/numpy may transitively pull in.
-    excludes=["tkinter", "PyQt5", "PyQt6", "PySide2", "PySide6", "matplotlib", "scipy", "IPython"],
+    # NB: tkinter is intentionally NOT excluded — the desktop "Save As…"
+    # dialog (qpcr_analyzer.app._save) uses tkinter.filedialog.
+    excludes=["PyQt5", "PyQt6", "PySide2", "PySide6", "matplotlib", "scipy", "IPython"],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,

@@ -5,9 +5,15 @@ That works in a real browser but is silently dropped by the embedded webview
 runtimes (WKWebView on macOS, WebView2 on Windows) we use in ``desktop.py``,
 because they don't have a "Downloads folder" concept the same way browsers do.
 
-This module exposes :func:`save_bytes`, which prefers pywebview's native
+This module exposes :func:`save_bytes`, which prefers a native ``tkinter``
 "Save As…" dialog when running inside the bundled desktop app, and falls back
 to ``ui.download`` for the standard browser-served deployment.
+
+Why ``tkinter`` and not ``pywebview.create_file_dialog``?
+The pywebview dialog is a synchronous call that must run on the platform GUI
+thread; NiceGUI's async wrapper around it has been flaky in practice (silent
+no-op on some webview backends). ``tkinter.filedialog`` is stdlib, runs on a
+private GUI thread we control, and behaves identically on Windows and macOS.
 
 It also exposes :func:`install_native_plotly_bridge`, which monkey-patches
 ``Plotly.downloadImage`` on the client so the camera-icon button on every
@@ -17,23 +23,74 @@ no-op blob download.
 
 from __future__ import annotations
 
+import asyncio
 import base64
+import logging
+import os
+import sys
 from pathlib import Path
 
 from nicegui import app, ui
 
+logger = logging.getLogger(__name__)
 
-def _native_window():
-    """Return the pywebview window if running in native mode, else ``None``.
 
-    NiceGUI exposes ``app.native.main_window`` only when ``ui.run(native=True)``
-    is in effect; in browser-served mode the attribute access either raises or
-    yields ``None``.
+def _running_native() -> bool:
+    """True when running inside the bundled desktop app or with ``native=True``.
+
+    ``sys.frozen`` is set by PyInstaller in the shipped .exe / .app bundles,
+    so we can decide without depending on NiceGUI's ``app.native.main_window``,
+    which has timing-dependent semantics.
     """
+    if getattr(sys, "frozen", False):
+        return True
     try:
-        return app.native.main_window
+        return app.native.main_window is not None
     except (AttributeError, RuntimeError):
-        return None
+        return False
+
+
+def _ask_save_path(
+    suggested_name: str,
+    tk_file_types: list[tuple[str, str]],
+) -> str | None:
+    """Show a tkinter Save-As dialog. Blocking — call via ``asyncio.to_thread``."""
+    import tkinter as tk
+    from tkinter import filedialog
+
+    root = tk.Tk()
+    root.withdraw()
+    # Force the dialog above the webview window — Windows/macOS sometimes
+    # park new top-levels behind the focused webview otherwise.
+    try:
+        root.attributes("-topmost", True)
+    except tk.TclError:
+        pass
+    try:
+        ext = os.path.splitext(suggested_name)[1]
+        path = filedialog.asksaveasfilename(
+            parent=root,
+            initialfile=suggested_name,
+            filetypes=tk_file_types or [("All files", "*.*")],
+            defaultextension=ext,
+        )
+    finally:
+        root.update_idletasks()
+        root.destroy()
+    return path or None
+
+
+def _normalize_file_types(specs: tuple[str, ...]) -> list[tuple[str, str]]:
+    """Translate ``"Label (*.ext)"`` strings into tk's ``(label, "*.ext")``."""
+    out: list[tuple[str, str]] = []
+    for spec in specs:
+        if "(" in spec and ")" in spec:
+            label, _, rest = spec.partition("(")
+            ext = rest.rstrip(")").strip()
+            out.append((label.strip(), ext or "*.*"))
+        else:
+            out.append((spec, "*.*"))
+    return out
 
 
 async def save_bytes(
@@ -43,38 +100,32 @@ async def save_bytes(
 ) -> None:
     """Save *data* to disk, picking the right mechanism for the runtime.
 
-    In native mode this opens pywebview's "Save As…" dialog and writes the
+    In native mode this opens a ``tkinter`` "Save As…" dialog and writes the
     bytes to the chosen path. In browser mode it falls back to
     ``ui.download``, which streams the bytes to the user's browser.
 
-    *file_types* uses the pywebview format, e.g.
+    *file_types* uses ``"Label (*.ext)"`` strings, e.g.
     ``("Excel workbook (*.xlsx)", "All files (*.*)")``.
     """
-    window = _native_window()
-    if window is None:
+    if not _running_native():
         ui.download(data, suggested_name)
         return
 
-    # Imported lazily so the browser-only install (no pywebview) still works.
-    import webview  # type: ignore[import-not-found]
-
+    tk_types = _normalize_file_types(file_types)
     try:
-        result = await window.create_file_dialog(
-            dialog_type=webview.SAVE_DIALOG,
-            save_filename=suggested_name,
-            file_types=file_types,
-        )
+        path = await asyncio.to_thread(_ask_save_path, suggested_name, tk_types)
     except Exception as ex:  # noqa: BLE001 -- surface any dialog error to UI
+        logger.exception("save-as dialog failed")
         ui.notify(f"Save dialog failed: {ex}", type="negative")
         return
 
-    if not result:
+    if not path:
         return  # user cancelled
 
-    path = result if isinstance(result, str) else result[0]
     try:
         Path(path).write_bytes(data)
     except OSError as ex:
+        logger.exception("file write failed")
         ui.notify(f"Could not write {path}: {ex}", type="negative")
         return
 
@@ -123,7 +174,7 @@ def install_native_plotly_bridge() -> None:
     Python handler decodes the base64 payload and routes through
     :func:`save_bytes`.
     """
-    if _native_window() is None:
+    if not _running_native():
         return
 
     ui.add_body_html(f"<script>{_PLOTLY_PATCH_JS}</script>")
