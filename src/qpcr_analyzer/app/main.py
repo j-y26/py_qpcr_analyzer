@@ -32,11 +32,14 @@ from qpcr_analyzer.app._save import install_native_plotly_bridge, save_bytes
 from qpcr_analyzer.core import (
     ROLE_LABELS,
     ROLES,
+    annotation_coverage,
     apply_mapping,
     build_blocks,
     compute_delta_ct,
     compute_delta_delta_ct,
     detect_columns,
+    drop_incomplete_rows,
+    find_incomplete_rows,
     group_order,
     mark_outliers,
     read_table,
@@ -994,10 +997,42 @@ def _build_step_mapping(state: dict, refs: dict, stepper) -> None:
                 for msg in errs:
                     ui.notify(msg, type="negative")
                 return
-            std = apply_mapping(state["raw_df"], mapping)
-            if std["Cq"].notna().sum() == 0:
+            std_full = apply_mapping(state["raw_df"], mapping)
+            if len(std_full) == 0:
                 ui.notify(
-                    "Selected Cq column has no numeric values.", type="negative"
+                    "No usable rows remain after dropping empty wells. "
+                    "Please check the column mapping.",
+                    type="negative",
+                )
+                return
+            if std_full["Cq"].notna().sum() == 0:
+                ui.notify(
+                    "Selected Cq column has no numeric values — check the "
+                    "mapping or whether the column contains data like "
+                    "'Undetermined' rather than Cq numbers.",
+                    type="negative",
+                )
+                return
+            silent_dropped = len(state["raw_df"]) - len(std_full)
+            incomplete = find_incomplete_rows(std_full)
+            std = drop_incomplete_rows(std_full)
+            if silent_dropped > 0:
+                ui.notify(
+                    f"Dropped {silent_dropped} fully-empty row(s) "
+                    "(no Cq, Sample, or Target).",
+                    type="info",
+                )
+            if len(incomplete) > 0:
+                ui.notify(
+                    f"Excluded {len(incomplete)} well(s) with incomplete "
+                    "annotations — see the panel above for details.",
+                    type="warning",
+                )
+            if len(std) == 0:
+                ui.notify(
+                    "No fully-annotated rows remain. Please fix the missing "
+                    "Target / Sample / Well entries in your input and re-upload.",
+                    type="negative",
                 )
                 return
 
@@ -1657,6 +1692,7 @@ def _render_mapping(state: dict, refs: dict) -> None:
                     state["hk_applied"] = False
                     _invalidate_results(state, refs)
                     _refresh_step_gates(state, refs)
+                    _render_mapping_completeness(state, refs)
 
                 sel.on_value_change(_on_change)
 
@@ -1669,12 +1705,123 @@ def _render_mapping(state: dict, refs: dict) -> None:
                         "text-xs text-slate-400 uppercase tracking-wide"
                     )
 
+                # ``match`` is the auto-detect name-similarity confidence —
+                # not data coverage. Coverage lives in the panel below.
                 if current is not None:
-                    ui.badge(f"auto · {conf:.0%}", color="green").classes("text-white")
+                    ui.badge(f"match · {conf:.0%}", color="green").classes(
+                        "text-white"
+                    )
                 elif required:
                     ui.badge("unmatched", color="red").classes("text-white")
                 else:
                     ui.badge("n/a", color="grey").classes("text-white")
+
+        # Data-completeness panel — coverage per required field and a list
+        # of rows missing Well/Target/Sample. Re-renders whenever a column
+        # mapping is changed via ``_on_change`` above.
+        refs["mapping_completeness"] = ui.column().classes("w-full gap-2 mt-2")
+    _render_mapping_completeness(state, refs)
+
+
+def _render_mapping_completeness(state: dict, refs: dict) -> None:
+    """Render the data-completeness panel beneath the column-mapping selectors.
+
+    Shows two things:
+        1. A coverage badge per required role (``Well: 46 / 48 (96%)``),
+           amber when below 100%.
+        2. A table of every row with a missing required annotation, so the
+           user can fix the source file or knowingly exclude the wells.
+    """
+    container = refs.get("mapping_completeness")
+    if container is None:
+        return
+    container.clear()
+
+    mapping = state.get("mapping")
+    raw = state.get("raw_df")
+    if mapping is None or raw is None:
+        return
+    if any(mapping.assignments.get(r) is None for r in REQUIRED):
+        with container:
+            ui.label(
+                "Map every required column to see data completeness."
+            ).classes("text-xs text-amber-700")
+        return
+
+    std = apply_mapping(raw, mapping)
+    coverage = annotation_coverage(std)
+    incomplete = find_incomplete_rows(std)
+
+    with container:
+        with ui.card().classes(
+            "qpcr-card w-full rounded-xl shadow-sm "
+            "border border-slate-200 p-3"
+        ):
+            ui.label("Data completeness").classes(
+                "text-sm font-semibold text-slate-700"
+            )
+            ui.label(
+                f"After loading: {len(std)} usable wells "
+                f"(fully-empty wells with no Cq / Sample / Target are "
+                f"dropped silently)."
+            ).classes("text-xs text-slate-600")
+
+            with ui.row().classes("w-full items-center gap-2 flex-wrap"):
+                for field, (n_filled, n_total) in coverage.items():
+                    pct = (n_filled / n_total) if n_total else 0.0
+                    full = n_filled == n_total
+                    is_required_label = field in ("Well", "Target", "Sample")
+                    if full:
+                        color = "green"
+                    elif is_required_label:
+                        color = "red"
+                    else:
+                        color = "amber"
+                    ui.badge(
+                        f"{field}: {n_filled} / {n_total} ({pct:.0%})",
+                        color=color,
+                    ).classes("text-white")
+
+            if incomplete.empty:
+                ui.label(
+                    "All required annotations are filled. ✓"
+                ).classes("text-xs text-green-700")
+                return
+
+            ui.separator()
+            ui.label(
+                f"{len(incomplete)} well(s) have missing required "
+                "annotations. Either fix them in your source file and "
+                "re-upload, or click Continue to exclude these wells from "
+                "the analysis."
+            ).classes("text-xs text-rose-700 font-medium")
+
+            display_rows = [
+                {
+                    "Well": (r.Well or "—"),
+                    "Sample": (r.Sample or "—"),
+                    "Target": (r.Target or "—"),
+                    "Cq": "—" if pd.isna(r.Cq) else f"{float(r.Cq):.3f}",
+                    "Missing": r.Missing,
+                }
+                for r in incomplete.itertuples()
+            ]
+            ui.table(
+                columns=[
+                    {"name": "Well", "label": "Well", "field": "Well"},
+                    {"name": "Sample", "label": "Sample", "field": "Sample"},
+                    {"name": "Target", "label": "Target", "field": "Target"},
+                    {"name": "Cq", "label": "Cq", "field": "Cq"},
+                    {
+                        "name": "Missing",
+                        "label": "Missing",
+                        "field": "Missing",
+                        "classes": "text-rose-700 font-medium",
+                    },
+                ],
+                rows=display_rows,
+                row_key="Well",
+            ).props("dense flat bordered").classes("w-full")
 
 
 def _render_groups(state: dict, refs: dict) -> None:
