@@ -244,8 +244,59 @@ def validate_sample_batches(df: pd.DataFrame) -> list[str]:
     return errors
 
 
+# Strings users tend to type for "no signal" in a qPCR exporter — coerced to
+# NaN before the numeric conversion so well-typed numbers in the same column
+# aren't dragged to NaN by ``pd.to_numeric``'s all-or-nothing dtype inference.
+_CQ_MISSING_TOKENS = frozenset(
+    {
+        "",
+        "na",
+        "n/a",
+        "nan",
+        "null",
+        "none",
+        "nd",
+        "n.d.",
+        "-",
+        "--",
+        "undetermined",
+        "undet",
+        "no ct",
+        "no cq",
+    }
+)
+
+
+def _coerce_cq(series: pd.Series) -> pd.Series:
+    """Coerce a Cq column to numeric, tolerating whitespace and "no signal" tokens.
+
+    ``pd.to_numeric(errors='coerce')`` already maps unparseable strings to
+    NaN, but qPCR exporters tend to write tokens like ``Undetermined`` /
+    ``N/A`` interleaved with numeric Cq values. We strip whitespace and map
+    those tokens explicitly so a stray trailing space or unusual exporter
+    wording cannot poison the dtype inference.
+    """
+    if pd.api.types.is_numeric_dtype(series):
+        return pd.to_numeric(series, errors="coerce")
+    s = series.astype(str).str.strip()
+    lowered = s.str.lower()
+    s = s.mask(lowered.isin(_CQ_MISSING_TOKENS))
+    return pd.to_numeric(s, errors="coerce")
+
+
+def _coerce_label(series: pd.Series) -> pd.Series:
+    """Coerce a label column (Well/Target/Sample) to stripped string.
+
+    NaN-like values become empty strings so callers can test ``== ""`` to
+    spot incomplete annotations.
+    """
+    s = series.astype("object").where(series.notna(), "")
+    s = s.astype(str).str.strip()
+    return s.replace({"nan": "", "None": "", "NaN": ""})
+
+
 def apply_mapping(df: pd.DataFrame, mapping: ColumnMapping) -> pd.DataFrame:
-    """Project ``df`` to canonical columns and coerce types.
+    """Project ``df`` to canonical columns, coerce types, drop unusable rows.
 
     Returns a new DataFrame containing only the mapped columns, renamed to
     ``Well``, ``Target``, ``Sample``, ``Cq`` and ``Group``. Behaviour:
@@ -253,9 +304,15 @@ def apply_mapping(df: pd.DataFrame, mapping: ColumnMapping) -> pd.DataFrame:
     * If the ``group`` role is unmapped, every row is assigned to ``"all"``
       so downstream code can rely on ``Group`` always being present.
     * Missing/null values in ``Group`` become ``"unassigned"``.
-    * ``Cq`` is coerced to numeric (non-numeric values become ``NaN`` and
-      will be flagged as outliers downstream).
-    * ``Well`` / ``Target`` / ``Sample`` are forced to string.
+    * ``Cq`` is coerced to numeric (whitespace, ``Undetermined``, ``N/A``
+      and similar markers become ``NaN`` and will be flagged as outliers
+      downstream).
+    * ``Well`` / ``Target`` / ``Sample`` are forced to stripped string.
+    * Rows where **all of** Cq, Sample, and Target are blank are dropped
+      silently — these are truly unused wells the exporter wrote out with
+      no data. Rows missing only *some* required fields are **kept** so
+      :func:`find_incomplete_rows` (and the UI) can surface them for user
+      review rather than silently discarding partial annotations.
     """
     rename: dict[str, str] = {}
     for role, col in mapping.assignments.items():
@@ -266,11 +323,108 @@ def apply_mapping(df: pd.DataFrame, mapping: ColumnMapping) -> pd.DataFrame:
     out = df[keep].rename(columns=rename).copy()
     if "Group" not in out.columns:
         out["Group"] = "all"
-    out["Group"] = out["Group"].fillna("unassigned").astype(str)
-    out["Cq"] = pd.to_numeric(out["Cq"], errors="coerce")
-    out["Well"] = out["Well"].astype(str)
-    out["Target"] = out["Target"].astype(str)
-    out["Sample"] = out["Sample"].astype(str)
+    out["Group"] = out["Group"].fillna("unassigned").astype(str).str.strip()
+    out.loc[out["Group"] == "", "Group"] = "unassigned"
+    out["Cq"] = _coerce_cq(out["Cq"])
+    out["Well"] = _coerce_label(out["Well"])
+    out["Target"] = _coerce_label(out["Target"])
+    out["Sample"] = _coerce_label(out["Sample"])
     if "Batch" in out.columns:
-        out["Batch"] = out["Batch"].fillna("batch_1").astype(str)
+        out["Batch"] = out["Batch"].fillna("batch_1").astype(str).str.strip()
+        out.loc[out["Batch"] == "", "Batch"] = "batch_1"
+    # Silent drop: only rows that have NO biology data at all. Rows with
+    # partial missingness (e.g. Sample missing but Target+Cq present) stay
+    # in the frame so the UI can flag them; the UI is responsible for
+    # excluding them with explicit user acknowledgement.
+    fully_empty = (
+        out["Cq"].isna() & (out["Target"] == "") & (out["Sample"] == "")
+    )
+    return out.loc[~fully_empty].reset_index(drop=True)
+
+
+# Fields a row must have annotated to be analyzable downstream. Cq is not
+# in this list — a row with valid Target+Sample but NaN Cq is an
+# Undetermined well, biologically meaningful and tracked through the
+# outlier-review UI.
+_ANNOTATION_FIELDS: tuple[str, ...] = ("Well", "Target", "Sample")
+
+
+def find_incomplete_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """Return rows with one or more required annotations missing.
+
+    "Incomplete" here means at least one of Well / Target / Sample is blank
+    or NaN. Cq missing on its own is **not** flagged: it represents an
+    Undetermined well, valid biology surfaced through outlier review.
+
+    Args:
+        df: Standardised DataFrame from :func:`apply_mapping`.
+
+    Returns:
+        A subset of ``df`` containing only the flagged rows, with an extra
+        ``Missing`` column listing the names of the missing required fields
+        (comma-joined, e.g. ``"Target"`` or ``"Sample, Well"``). The
+        original row index is preserved so callers can map back to the
+        source row order. Empty DataFrame when nothing is missing.
+    """
+    if df.empty:
+        return df.assign(Missing=pd.Series(dtype=str)).iloc[0:0]
+
+    masks: dict[str, pd.Series] = {}
+    for field in _ANNOTATION_FIELDS:
+        if field not in df.columns:
+            continue
+        col = df[field]
+        if pd.api.types.is_numeric_dtype(col):
+            masks[field] = col.isna()
+        else:
+            masks[field] = col.isna() | (col.astype(str).str.strip() == "")
+
+    any_missing = pd.Series(False, index=df.index)
+    for m in masks.values():
+        any_missing = any_missing | m
+
+    if not any_missing.any():
+        return df.loc[any_missing].assign(Missing="")
+
+    out = df.loc[any_missing].copy()
+    def _missing_for_row(idx: int) -> str:
+        return ", ".join(f for f, m in masks.items() if bool(m.loc[idx]))
+    out["Missing"] = [_missing_for_row(i) for i in out.index]
     return out
+
+
+def annotation_coverage(df: pd.DataFrame) -> dict[str, tuple[int, int]]:
+    """Per required-annotation coverage: ``{field: (n_filled, n_total)}``.
+
+    Used by the UI to render "Sample: 45 / 48 (94%)" style coverage badges
+    in the column-mapping step. ``Cq`` is included alongside the annotation
+    fields so the UI can show how many rows have a numeric Cq, but a low
+    Cq coverage is informational only — it does not make a row "incomplete".
+    """
+    out: dict[str, tuple[int, int]] = {}
+    n_total = len(df)
+    for field in (*_ANNOTATION_FIELDS, "Cq"):
+        if field not in df.columns:
+            continue
+        col = df[field]
+        if pd.api.types.is_numeric_dtype(col):
+            n_filled = int(col.notna().sum())
+        else:
+            n_filled = int(
+                (col.notna() & (col.astype(str).str.strip() != "")).sum()
+            )
+        out[field] = (n_filled, n_total)
+    return out
+
+
+def drop_incomplete_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """Return ``df`` with all rows flagged by :func:`find_incomplete_rows` removed.
+
+    Convenience for the UI: after the user acknowledges the incomplete-rows
+    table in step 2, this is what strips them out before the standardised
+    DataFrame propagates to downstream steps.
+    """
+    incomplete = find_incomplete_rows(df)
+    if incomplete.empty:
+        return df.reset_index(drop=True)
+    return df.drop(incomplete.index).reset_index(drop=True)
